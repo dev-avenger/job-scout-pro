@@ -1,0 +1,49 @@
+{
+  "name": "@auto-job-apply/api",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "nest start --watch",
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "start:prod": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run --dir src",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@auto-job-apply/db": "workspace:*",
+    "@auto-job-apply/shared-types": "workspace:*",
+    "@auto-job-apply/shared-utils": "workspace:*",
+    "@nestjs/common": "^10.4.0",
+    "@nestjs/core": "^10.4.0",
+    "@nestjs/platform-fastify": "^10.4.0",
+    "@nestjs/config": "^3.2.0",
+    "@nestjs/passport": "^10.0.0",
+    "@nestjs/jwt": "^10.2.0",
+    "@nestjs/websockets": "^10.4.0",
+    "@nestjs/platform-ws": "^10.4.0",
+    "@nestjs/bullmq": "^10.2.0",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
+    "@fastify/cors": "^10.0.0",
+    "@fastify/helmet": "^12.0.0",
+    "bullmq": "^5.25.0",
+    "ioredis": "^5.4.0",
+    "reflect-metadata": "^0.2.0",
+    "rxjs": "^7.8.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@auto-job-apply/tsconfig": "workspace:*",
+    "@nestjs/cli": "^10.4.0",
+    "@nestjs/testing": "^10.4.0",
+    "@types/node": "^22.0.0",
+    "@types/passport-jwt": "^4.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

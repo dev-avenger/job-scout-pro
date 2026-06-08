@@ -1,0 +1,2 @@
+export const INBOX_SERVICE = 'INBOX_SERVICE';
+export const INBOX_REPOSITORY = 'INBOX_REPOSITORY';

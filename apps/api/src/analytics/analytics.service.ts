@@ -1,0 +1,35 @@
+import { Injectable, Inject } from '@nestjs/common';
+import { ANALYTICS_REPOSITORY } from './analytics.constants.js';
+import type { IAnalyticsRepository } from './interfaces/analytics-repository.interface.js';
+import type { IAnalyticsService } from './interfaces/analytics-service.interface.js';
+
+@Injectable()
+export class AnalyticsService implements IAnalyticsService {
+  constructor(@Inject(ANALYTICS_REPOSITORY) private readonly repo: IAnalyticsRepository) {}
+
+  async getOverview(userId: string) {
+    return this.repo.getOverview(userId);
+  }
+
+  async getFunnel(userId: string) {
+    return this.repo.getFunnel(userId);
+  }
+
+  async getLlmSpend(userId: string) {
+    const [dailySpendCents, monthlySpendCents, totalSpendCents] = await Promise.all([
+      this.repo.getDailySpend(userId),
+      this.repo.getMonthlySpend(userId),
+      this.repo.getTotalSpend(userId),
+    ]);
+
+    return { dailySpendCents, monthlySpendCents, totalSpendCents };
+  }
+
+  async getLlmRequests(userId: string) {
+    return this.repo.getRecentLlmRequests(userId);
+  }
+
+  async getAgentLogs(userId: string) {
+    return this.repo.getRecentAgentLogs(userId);
+  }
+}

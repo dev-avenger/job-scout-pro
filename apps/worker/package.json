@@ -1,0 +1,30 @@
+{
+  "name": "@auto-job-apply/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/worker.ts",
+    "build": "tsc",
+    "start": "node dist/worker.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@auto-job-apply/db": "workspace:*",
+    "@auto-job-apply/shared-types": "workspace:*",
+    "@auto-job-apply/shared-utils": "workspace:*",
+    "bullmq": "^5.25.0",
+    "ioredis": "^5.4.0",
+    "reflect-metadata": "^0.2.0",
+    "tsyringe": "^4.8.0"
+  },
+  "devDependencies": {
+    "@auto-job-apply/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
