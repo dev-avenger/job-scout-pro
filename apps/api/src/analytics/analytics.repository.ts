@@ -41,6 +41,37 @@ export class AnalyticsRepository implements IAnalyticsRepository {
     return funnel;
   }
 
+  async getVolume(userId: string, days: number): Promise<{ date: string; count: number }[]> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    startDate.setHours(0, 0, 0, 0);
+
+    const rows = await this.db
+      .select({
+        date: sql<string>`TO_CHAR(created_at::date, 'YYYY-MM-DD')`,
+        count: sql<number>`count(*)`,
+      })
+      .from(applications)
+      .where(and(eq(applications.userId, userId), gte(applications.createdAt, startDate)))
+      .groupBy(sql`created_at::date`)
+      .orderBy(sql`created_at::date`);
+
+    // Fill in missing dates with count 0
+    const result: { date: string; count: number }[] = [];
+    const dateMap = new Map(rows.map((r) => [r.date, Number(r.count)]));
+    const cursor = new Date(startDate);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+
+    while (cursor <= today) {
+      const key = cursor.toISOString().slice(0, 10);
+      result.push({ date: key, count: dateMap.get(key) ?? 0 });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return result;
+  }
+
   async getDailySpend(userId: string) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);

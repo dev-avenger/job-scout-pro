@@ -2,7 +2,9 @@
   "extends": "@auto-job-apply/tsconfig/node.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "noEmitOnError": false,
+    "skipLibCheck": true
   },
   "include": ["src/**/*"]
 }

@@ -1,5 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
-import type Redis from 'ioredis';
+import { sql } from 'drizzle-orm';
+import type { Redis } from 'ioredis';
 import type { Database } from '@auto-job-apply/db';
 import { DRIZZLE_CLIENT } from '../core/database/database.constants.js';
 import { REDIS_CLIENT } from '../core/redis/redis.constants.js';
@@ -18,7 +19,7 @@ export class HealthService {
     let redisStatus: 'connected' | 'disconnected' = 'disconnected';
 
     try {
-      await (this.db as any).execute({ sql: 'SELECT 1' });
+      await this.db.execute(sql`SELECT 1`);
       postgresStatus = 'connected';
     } catch {
       // postgres disconnected

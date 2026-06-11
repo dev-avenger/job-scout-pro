@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Combined AI Review Synthesis — Job Application Agent</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface-2: #232733;
+    --surface-3: #2c3040;
+    --border: #353a4a;
+    --text: #e4e7ef;
+    --text-muted: #8b92a8;
+    --text-dim: #5c6378;
+    --accent: #6c8cff;
+    --accent-glow: rgba(108, 140, 255, 0.15);
+    --core: #22c55e;
+    --core-bg: rgba(34, 197, 94, 0.1);
+    --high: #3b82f6;
+    --high-bg: rgba(59, 130, 246, 0.1);
+    --nice: #f59e0b;
+    --nice-bg: rgba(245, 158, 11, 0.1);
+    --cut: #ef4444;
+    --cut-bg: rgba(239, 68, 68, 0.1);
+    --warn: #f97316;
+    --success: #10b981;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.3);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* Hero */
+  .hero {
+    padding: 80px 24px 60px;
+    text-align: center;
+    background: linear-gradient(180deg, rgba(108,140,255,0.06) 0%, transparent 100%);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hero-title {
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 900;
+    letter-spacing: -1.5px;
+    margin-bottom: 12px;
+    background: linear-gradient(135deg, #fff 0%, #a0b4ff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .hero-sub {
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    margin-bottom: 32px;
+  }
+
+  .reviewer-pills {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 32px;
+  }
+
+  .reviewer-pill {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  .stats-bar {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    flex-wrap: wrap;
+  }
+
+  .stat {
+    text-align: center;
+  }
+
+  .stat-num {
+    display: block;
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--accent);
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* Navigation */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(15, 17, 23, 0.9);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 0;
+  }
+
+  .nav-inner {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 0 24px;
+    max-width: 1100px;
+    margin: 0 auto;
+    scrollbar-width: none;
+  }
+
+  .nav-inner::-webkit-scrollbar { display: none; }
+
+  .nav-link {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+
+  .nav-link:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  /* Sections */
+  .section {
+    padding: 60px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .section-num {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-glow);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .section-title {
+    font-size: 1.6rem;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+
+  /* Verdict Banner */
+  .verdict-banner {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 32px;
+    margin-bottom: 32px;
+  }
+
+  .verdict-banner h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 16px;
+    color: var(--accent);
+  }
+
+  .verdict-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+  }
+
+  .verdict-item {
+    background: var(--surface-2);
+    border-radius: var(--radius-sm);
+    padding: 14px 18px;
+    border-left: 3px solid var(--accent);
+  }
+
+  .verdict-item .reviewer {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+
+  .verdict-item .quote {
+    font-size: 0.85rem;
+    color: var(--text);
+    font-style: italic;
+  }
+
+  .verdict-item .cut-pct {
+    font-size: 0.8rem;
+    color: var(--cut);
+    font-weight: 600;
+    margin-top: 4px;
+  }
+
+  /* Tables */
+  .table-wrap {
+    overflow-x: auto;
+    margin: 20px 0;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+
+  thead {
+    background: var(--surface-2);
+  }
+
+  th {
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  tr:hover { background: rgba(108, 140, 255, 0.03); }
+
+  /* Verdict badges */
+  .v-core {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: var(--core-bg);
+    color: var(--core);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+  }
+
+  .v-high {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: var(--high-bg);
+    color: var(--high);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+  }
+
+  .v-nice {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: var(--nice-bg);
+    color: var(--nice);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+  }
+
+  .v-cut {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: var(--cut-bg);
+    color: var(--cut);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+
+  /* Cards */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+
+  .card h4 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .card p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  .card .count {
+    font-size: 0.75rem;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  /* Missing features */
+  .missing-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--warn);
+    border-radius: var(--radius-sm);
+    padding: 20px 24px;
+    margin: 12px 0;
+  }
+
+  .missing-item h4 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .missing-item .flagged {
+    font-size: 0.75rem;
+    color: var(--warn);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .missing-item p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  /* Red flags */
+  .red-flag {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--cut);
+    border-radius: var(--radius-sm);
+    padding: 20px 24px;
+    margin: 12px 0;
+  }
+
+  .red-flag h4 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: var(--cut);
+  }
+
+  .red-flag p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  .red-flag .consensus {
+    margin-top: 10px;
+    padding: 10px 14px;
+    background: var(--surface-2);
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    color: var(--text);
+  }
+
+  .red-flag .consensus strong {
+    color: var(--success);
+  }
+
+  /* Phase blocks */
+  .phase {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 28px;
+    margin: 16px 0;
+  }
+
+  .phase-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .phase-num {
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: var(--bg);
+    background: var(--accent);
+    padding: 4px 10px;
+    border-radius: 4px;
+  }
+
+  .phase-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  .phase-desc {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+  }
+
+  .phase ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .phase li {
+    padding: 6px 0;
+    font-size: 0.85rem;
+    color: var(--text);
+    padding-left: 20px;
+    position: relative;
+  }
+
+  .phase li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 14px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.6;
+  }
+
+  .phase.never li::before {
+    background: var(--cut);
+  }
+
+  /* Insights */
+  .insight-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
+  }
+
+  .insight-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+
+  .insight-card .reviewer-name {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+  }
+
+  .insight-card ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .insight-card li {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    padding: 4px 0;
+    padding-left: 14px;
+    position: relative;
+  }
+
+  .insight-card li::before {
+    content: '\2022';
+    position: absolute;
+    left: 0;
+    color: var(--text-dim);
+  }
+
+  /* Action plan */
+  .action-block {
+    background: linear-gradient(135deg, rgba(108,140,255,0.08), rgba(16,185,129,0.05));
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 28px 32px;
+    margin: 16px 0;
+  }
+
+  .action-block h4 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+
+  .action-block ol {
+    padding-left: 20px;
+  }
+
+  .action-block li {
+    font-size: 0.88rem;
+    color: var(--text);
+    padding: 4px 0;
+    line-height: 1.6;
+  }
+
+  /* Footer */
+  .footer {
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .hero { padding: 50px 16px 40px; }
+    .stats-bar { gap: 24px; }
+    .stat-num { font-size: 1.5rem; }
+    .section { padding: 40px 0; }
+    .card-grid { grid-template-columns: 1fr; }
+    .insight-grid { grid-template-columns: 1fr; }
+    .verdict-grid { grid-template-columns: 1fr; }
+  }
+
+  /* Comparison bars */
+  .bar-chart {
+    margin: 16px 0;
+  }
+
+  .bar-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 8px 0;
+  }
+
+  .bar-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    width: 200px;
+    flex-shrink: 0;
+  }
+
+  .bar-track {
+    flex: 1;
+    height: 24px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding-left: 10px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: white;
+  }
+
+  .bar-fill.full { background: var(--core); }
+  .bar-fill.high { background: var(--high); }
+  .bar-fill.mid { background: var(--nice); }
+
+  /* Highlight box */
+  .highlight-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 28px;
+    margin: 24px 0;
+    text-align: center;
+  }
+
+  .highlight-box .big-text {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .highlight-box .sub-text {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+  }
+
+  p { margin-bottom: 12px; }
+  strong { color: var(--text); }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <h1 class="hero-title">Combined AI Review Synthesis</h1>
+  <p class="hero-sub">Job Application Agent Specification &mdash; 8 Independent Reviews Compared</p>
+  <div class="reviewer-pills">
+    <span class="reviewer-pill">Perplexity AI</span>
+    <span class="reviewer-pill">KIMI AI</span>
+    <span class="reviewer-pill">Gemini AI</span>
+    <span class="reviewer-pill">Claude AI</span>
+    <span class="reviewer-pill">Grok AI</span>
+    <span class="reviewer-pill">DeepSeek AI</span>
+    <span class="reviewer-pill">OpenAI</span>
+    <span class="reviewer-pill">Meta AI</span>
+  </div>
+  <div class="stats-bar">
+    <div class="stat"><span class="stat-num">8</span><span class="stat-label">Reviewers</span></div>
+    <div class="stat"><span class="stat-num">18</span><span class="stat-label">Features to Keep</span></div>
+    <div class="stat"><span class="stat-num">18</span><span class="stat-label">Features to Cut</span></div>
+    <div class="stat"><span class="stat-num">50-70%</span><span class="stat-label">Scope Reduction</span></div>
+    <div class="stat"><span class="stat-num">100%</span><span class="stat-label">Agree: Viable Core</span></div>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="#summary" class="nav-link">Summary</a>
+    <a href="#core" class="nav-link">Core Features</a>
+    <a href="#cut" class="nav-link">Cut Features</a>
+    <a href="#top20" class="nav-link">Top 20</a>
+    <a href="#missing" class="nav-link">Missing</a>
+    <a href="#architecture" class="nav-link">Architecture</a>
+    <a href="#build-order" class="nav-link">Build Order</a>
+    <a href="#competitive" class="nav-link">Competitive</a>
+    <a href="#insights" class="nav-link">Unique Insights</a>
+    <a href="#action" class="nav-link">Action Plan</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- SUMMARY -->
+  <div class="section" id="summary">
+    <div class="section-header">
+      <span class="section-num">00</span>
+      <h2 class="section-title">Executive Summary</h2>
+    </div>
+
+    <p>All 8 AI reviewers reached the same fundamental conclusion: <strong>the core concept is viable but the specification is catastrophically over-scoped.</strong> The document describes 5-10 separate products masquerading as one, and needs to be cut by 50-70% to be buildable by a small team.</p>
+
+    <div class="verdict-banner">
+      <h3>Verdict from Each Reviewer</h3>
+      <div class="verdict-grid">
+        <div class="verdict-item">
+          <div class="reviewer">Perplexity AI</div>
+          <div class="quote">"Viable ONLY if scope cut by more than half"</div>
+          <div class="cut-pct">Cut: >50%</div>
+        </div>
+        <div class="verdict-item">
+          <div class="reviewer">KIMI AI</div>
+          <div class="quote">"Technically ambitious but commercially unfocused"</div>
+          <div class="cut-pct">Cut: 60% permanently, 20% deferred</div>
+        </div>
+        <div class="verdict-item">
+          <div class="reviewer">Gemini AI</div>
+          <div class="quote">"Will collapse under its own weight before executing a single application"</div>
+          <div class="cut-pct">Cut: Keep only 20 core components</div>
+        </div>
+        <div class="verdict-item">
+          <div class="reviewer">Claude AI</div>
+          <div class="quote">"Viable product idea being crushed by scope"</div>
+          <div class="cut-pct">Cut: to 20 features, spec to 500 lines</div>
+        </div>
+        <div class="verdict-item">
+          <div class="reviewer">Grok AI</div>
+          <div class="quote">"Impressive but critically flawed blueprint"</div>
+          <div class="cut-pct">Cut: ~70%</div>
+        </div>
+        <div class="verdict-item">
+          <div class="reviewer">DeepSeek AI</div>
+          <div class="quote">"Not a product &mdash; it's a platform, suite, and wish list"</div>
+          <div class="cut-pct">Cut: 70%, this is a 5-10 year roadmap</div>
+        </div>
+        <div class="verdict-item">
+          <div class="reviewer">OpenAI</div>
+          <div class="quote">"8 businesses simultaneously, never shipping the one thing"</div>
+          <div class="cut-pct">Cut: to 20 features, spec to 300 lines</div>
+        </div>
+        <div class="verdict-item">
+          <div class="reviewer">Meta AI</div>
+          <div class="quote">"Five products stitched together"</div>
+          <div class="cut-pct">Cut: Keep 20, cut everything else</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="highlight-box">
+      <div class="big-text">The spec should shrink from 1,000 lines to 300-500 lines</div>
+      <div class="sub-text">Focus exclusively on: find &rarr; tailor &rarr; apply &rarr; track &rarr; interview</div>
+    </div>
+  </div>
+
+  <!-- CORE FEATURES -->
+  <div class="section" id="core">
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <h2 class="section-title">Universal CORE Features</h2>
+    </div>
+
+    <p>These features were unanimously rated <span class="v-core">CORE</span> or equivalent by all 8 reviewers:</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Feature</th><th>Agreement</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>Resume import and parsing (PDF, DOCX, LinkedIn)</td><td><span class="v-core">8/8 CORE</span></td></tr>
+          <tr><td>2</td><td>Per-job resume tailoring with keyword extraction</td><td><span class="v-core">8/8 CORE</span></td></tr>
+          <tr><td>3</td><td>ATS scoring and validation</td><td><span class="v-core">8/8 CORE</span></td></tr>
+          <tr><td>4</td><td>Job search across multiple boards</td><td><span class="v-core">8/8 CORE</span></td></tr>
+          <tr><td>5</td><td>Job deduplication and filtering</td><td><span class="v-core">8/8 CORE</span></td></tr>
+          <tr><td>6</td><td>Application form mapping and autofill</td><td><span class="v-core">8/8 CORE</span></td></tr>
+          <tr><td>7</td><td>Portal login and session management</td><td><span class="v-core">8/8 CORE</span></td></tr>
+          <tr><td>8</td><td>Application submission</td><td><span class="v-core">8/8 CORE</span></td></tr>
+          <tr><td>9</td><td>Application tracking database</td><td><span class="v-core">8/8 CORE</span></td></tr>
+          <tr><td>10</td><td>Inbox monitoring and email classification</td><td><span class="v-core">8/8 CORE</span></td></tr>
+          <tr><td>11</td><td>Autonomy modes (Full Autopilot / Supervised / Guided)</td><td><span class="v-core">8/8 CORE</span></td></tr>
+          <tr><td>12</td><td>Pause All / Kill Switch</td><td><span class="v-core">8/8 CORE</span></td></tr>
+          <tr><td>13</td><td>Scam detection</td><td><span class="v-core">7/8 CORE</span></td></tr>
+          <tr><td>14</td><td>Google Sheets sync</td><td><span class="v-core">7/8 CORE</span></td></tr>
+          <tr><td>15</td><td>Status portal / dashboard</td><td><span class="v-core">7/8 CORE</span></td></tr>
+          <tr><td>16</td><td>Human-like throttling and anti-detection</td><td><span class="v-core">7/8 CORE</span></td></tr>
+          <tr><td>17</td><td>Company/keyword blacklists</td><td><span class="v-core">7/8 CORE</span></td></tr>
+          <tr><td>18</td><td>Duplicate application prevention</td><td><span class="v-core">7/8 CORE</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- CUT FEATURES -->
+  <div class="section" id="cut">
+    <div class="section-header">
+      <span class="section-num">02</span>
+      <h2 class="section-title">Universal CUT Features</h2>
+    </div>
+
+    <p>These features were unanimously rated <span class="v-cut">IRRELEVANT / CUT</span> by all 8 reviewers:</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Feature</th><th>Consensus Reason</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>Deepfake interview detection</td><td>Technically immature, nearly non-existent problem</td></tr>
+          <tr><td>2</td><td>Psychometric profiling (Big Five, DISC)</td><td>Pseudoscience, legal risk, no hiring impact</td></tr>
+          <tr><td>3</td><td>Video resume generation / AI avatar</td><td>Cringeworthy, low adoption, employer backlash</td></tr>
+          <tr><td>4</td><td>Multi-jurisdiction tax optimiser (111 countries)</td><td>Regulated profession, massive liability</td></tr>
+          <tr><td>5</td><td>Health insurance plan comparison</td><td>Regulated, data unavailable, separate product</td></tr>
+          <tr><td>6</td><td>Childcare/family benefit analysis</td><td>Out of scope, HR benefits tool</td></tr>
+          <tr><td>7</td><td>Pension/retirement plan comparison</td><td>Financial advice territory, liability</td></tr>
+          <tr><td>8</td><td>Patent activity as hiring signal</td><td>Weak signal, 18+ months to clear, irrelevant</td></tr>
+          <tr><td>9</td><td>Automated LinkedIn engagement</td><td>ToS violation, account ban risk, detectable</td></tr>
+          <tr><td>10</td><td>Blockchain credential verification</td><td>Near-zero adoption, theatrical</td></tr>
+          <tr><td>11</td><td>Government/security clearance support</td><td>Niche, regulated, dangerous if incorrect</td></tr>
+          <tr><td>12</td><td>Professional headshot generation</td><td>Commodity, out of scope</td></tr>
+          <tr><td>13</td><td>Voice-based interaction</td><td>Wrong persona, nobody uses this</td></tr>
+          <tr><td>14</td><td>White-label SaaS (at launch)</td><td>Premature, separate business</td></tr>
+          <tr><td>15</td><td>Email signature optimisation</td><td>Completely irrelevant to job applications</td></tr>
+          <tr><td>16</td><td>Mentorship matching</td><td>Separate marketplace product</td></tr>
+          <tr><td>17</td><td>DEI/ESG scoring</td><td>Contested data, political liability, niche</td></tr>
+          <tr><td>18</td><td>Background check / E-Verify</td><td>FCRA regulated, massive legal liability</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TOP 20 -->
+  <div class="section" id="top20">
+    <div class="section-header">
+      <span class="section-num">03</span>
+      <h2 class="section-title">Consensus Top 20 Features</h2>
+    </div>
+
+    <p>Combining all 8 reviewers' top-20 lists, ranked by frequency of appearance:</p>
+
+    <div class="bar-chart">
+      <div class="bar-item"><span class="bar-label">Resume import + tailoring + ATS</span><div class="bar-track"><div class="bar-fill full" style="width:100%">8/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Job search + matching</span><div class="bar-track"><div class="bar-fill full" style="width:100%">8/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Form filling + submission</span><div class="bar-track"><div class="bar-fill full" style="width:100%">8/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Application tracking + Sheets</span><div class="bar-track"><div class="bar-fill full" style="width:100%">8/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Inbox monitoring + classification</span><div class="bar-track"><div class="bar-fill full" style="width:100%">8/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Autonomy modes + kill switch</span><div class="bar-track"><div class="bar-fill full" style="width:100%">8/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Job deduplication</span><div class="bar-track"><div class="bar-fill full" style="width:87.5%">7/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Scam detection</span><div class="bar-track"><div class="bar-fill full" style="width:87.5%">7/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Cover letter generation</span><div class="bar-track"><div class="bar-fill high" style="width:75%">6/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Follow-up emails</span><div class="bar-track"><div class="bar-fill high" style="width:75%">6/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Salary benchmarking</span><div class="bar-track"><div class="bar-fill high" style="width:75%">6/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Portal login / session mgmt</span><div class="bar-track"><div class="bar-fill high" style="width:75%">6/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Human-like throttling</span><div class="bar-track"><div class="bar-fill high" style="width:62.5%">5/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Calendar integration</span><div class="bar-track"><div class="bar-fill high" style="width:62.5%">5/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Dashboard / audit log</span><div class="bar-track"><div class="bar-fill high" style="width:62.5%">5/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Stealth mode</span><div class="bar-track"><div class="bar-fill mid" style="width:50%">4/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Hiring manager outreach</span><div class="bar-track"><div class="bar-fill mid" style="width:50%">4/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Interview prep / company brief</span><div class="bar-track"><div class="bar-fill mid" style="width:50%">4/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Browser extension</span><div class="bar-track"><div class="bar-fill mid" style="width:50%">4/8</div></div></div>
+      <div class="bar-item"><span class="bar-label">Visa sponsorship scoring</span><div class="bar-track"><div class="bar-fill mid" style="width:50%">4/8</div></div></div>
+    </div>
+  </div>
+
+  <!-- MISSING FEATURES -->
+  <div class="section" id="missing">
+    <div class="section-header">
+      <span class="section-num">04</span>
+      <h2 class="section-title">Critical Missing Features</h2>
+    </div>
+
+    <p>Every reviewer independently identified these gaps as more important than most features already in the spec:</p>
+
+    <div class="missing-item">
+      <h4>CAPTCHA and Anti-Bot Handling</h4>
+      <div class="flagged">Flagged by 8/8 reviewers</div>
+      <p>Workday, Greenhouse, Lever, and LinkedIn use PerimeterX, Cloudflare Turnstile, and reCAPTCHA. Without a strategy, 60%+ of applications fail silently. Need: 2Captcha/Anti-Captcha API, residential proxy rotation, browser fingerprint randomization, or human-in-the-loop fallback.</p>
+    </div>
+
+    <div class="missing-item">
+      <h4>Error Recovery and Retry Logic</h4>
+      <div class="flagged">Flagged by 8/8 reviewers</div>
+      <p>The spec only describes happy-path scenarios. Missing: exponential backoff, dead-letter queues, partial form recovery, screenshot-on-failure, failure classification (retryable vs. terminal), and user notification for terminal failures.</p>
+    </div>
+
+    <div class="missing-item">
+      <h4>Onboarding and Trust-Building Flow</h4>
+      <div class="flagged">Flagged by 7/8 reviewers</div>
+      <p>No first-run experience specified. Users need: guided setup wizard, dry-run/sandbox mode, example application previews, progressive trust escalation (forced Guided mode for first N applications), and a "quick start" path.</p>
+    </div>
+
+    <div class="missing-item">
+      <h4>Legal/ToS Compliance Framework</h4>
+      <div class="flagged">Flagged by 7/8 reviewers</div>
+      <p>Missing: explicit strategy per platform (API vs. automation vs. off-limits), CAN-SPAM compliance for outreach, GDPR data export, ToS violation disclosure to users, jurisdiction-specific rules.</p>
+    </div>
+
+    <div class="missing-item">
+      <h4>LLM Cost Management</h4>
+      <div class="flagged">Flagged by 6/8 reviewers</div>
+      <p>No cost controls. At 20+ applications/day with GPT-4 class models, users face $5-50/week. Need: per-application budgets, per-task model routing (cheap for extraction, expensive for writing), daily spend caps, cost estimates before runs.</p>
+    </div>
+
+    <div class="missing-item">
+      <h4>Observability and Monitoring</h4>
+      <div class="flagged">Flagged by 6/8 reviewers</div>
+      <p>No operational monitoring for the developer. Need: error rate dashboards, portal health metrics, automation success rates, LLM spend tracking, alerting when systems fail silently.</p>
+    </div>
+  </div>
+
+  <!-- ARCHITECTURE -->
+  <div class="section" id="architecture">
+    <div class="section-header">
+      <span class="section-num">05</span>
+      <h2 class="section-title">Architecture Red Flags</h2>
+    </div>
+
+    <div class="red-flag">
+      <h4>Full Autopilot vs. No Hallucination Contradiction</h4>
+      <p>The spec promises "zero human involvement" AND "never fabricates profile data." If the agent encounters an unknown question, it must either hallucinate (breaking trust) or pause (breaking autopilot).</p>
+      <div class="consensus"><strong>Consensus fix:</strong> Mandatory onboarding in Guided mode. Full Autopilot only after 30-50+ supervised applications calibrate quality.</div>
+    </div>
+
+    <div class="red-flag">
+      <h4>LinkedIn Automation = Existential Risk</h4>
+      <p>7/8 reviewers flagged this. LinkedIn actively detects and bans automation. If user accounts get flagged, press coverage frames the product as a scam. One "App gets users' LinkedIn banned" headline kills the product.</p>
+      <div class="consensus"><strong>Consensus fix:</strong> Cut all LinkedIn automation. Keep only profile optimization recommendations (no automation) and connection-surfacing (read-only).</div>
+    </div>
+
+    <div class="red-flag">
+      <h4>Server-Side Credential Storage</h4>
+      <p>Storing portal passwords server-side violates every platform's ToS and creates breach liability. No competitor does this &mdash; they all use browser extensions with local storage.</p>
+      <div class="consensus"><strong>Consensus fix:</strong> Browser extension architecture for form filling. OAuth where available. Server-side only with explicit risk disclosure + proper key management.</div>
+    </div>
+
+    <div class="red-flag">
+      <h4>Browser Automation Fragility</h4>
+      <p>Form mapping breaks when portals update. Dynamic IDs, shadow DOM, nested iframes, JS-rendered fields. Workday alone has tens of thousands of unique instances.</p>
+      <div class="consensus"><strong>Consensus fixes:</strong> LLM-based runtime DOM analysis (Gemini), browser extension as primary (DeepSeek/Meta), degradation strategy (Claude), cache 30 days + re-learn on failure (KIMI).</div>
+    </div>
+
+    <div class="red-flag">
+      <h4>Multi-Agent Overkill</h4>
+      <p>7 specialized agents is microservices complexity for a solo developer. Debugging inter-agent communication will consume more time than building the product.</p>
+      <div class="consensus"><strong>Consensus fix:</strong> Modular monolith with clear service boundaries. Add agent separation later if needed.</div>
+    </div>
+  </div>
+
+  <!-- BUILD ORDER -->
+  <div class="section" id="build-order">
+    <div class="section-header">
+      <span class="section-num">06</span>
+      <h2 class="section-title">Consensus Build Order</h2>
+    </div>
+
+    <div class="phase">
+      <div class="phase-header">
+        <span class="phase-num">PHASE 1</span>
+        <span class="phase-title">MVP &mdash; Prove the Core Loop Works</span>
+      </div>
+      <div class="phase-desc">All 8 reviewers agree: ship the minimum that reliably applies to jobs.</div>
+      <ul>
+        <li>Resume import + basic tailoring + ATS scoring</li>
+        <li>Job search on 2-5 boards with deduplication</li>
+        <li>Form filling for top 5 portals (Greenhouse, Lever, Workday, Indeed, LinkedIn Easy Apply)</li>
+        <li>Application tracking database + Google Sheets sync</li>
+        <li>Inbox monitoring (Gmail only)</li>
+        <li>Supervised/Guided mode ONLY (no Full Autopilot at launch)</li>
+        <li>Pause-all / Kill switch</li>
+        <li>Basic scam detection</li>
+        <li>Cover letter generation</li>
+        <li>Error handling + retry logic</li>
+        <li>Credential encryption with proper key management</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <div class="phase-header">
+        <span class="phase-num">PHASE 2</span>
+        <span class="phase-title">Core Expansion &mdash; Make it Competitive</span>
+      </div>
+      <div class="phase-desc">Features that make users pay and stay.</div>
+      <ul>
+        <li>Follow-up emails and thank-you notes</li>
+        <li>Full Autopilot mode (after trust is earned through 50+ applications)</li>
+        <li>Calendar integration</li>
+        <li>Salary benchmarking</li>
+        <li>Hiring manager outreach + referral surfacing</li>
+        <li>Browser extension</li>
+        <li>Stealth mode (employer blocklist)</li>
+        <li>Visa sponsorship scoring</li>
+        <li>Company research briefs</li>
+        <li>Human-like throttling improvements</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <div class="phase-header">
+        <span class="phase-num">PHASE 3</span>
+        <span class="phase-title">Differentiation &mdash; Features Competitors Lack</span>
+      </div>
+      <ul>
+        <li>Interview prep + AI mock interviews</li>
+        <li>Resume A/B testing (with accumulated data)</li>
+        <li>Application timing optimization</li>
+        <li>Company tech stack detection</li>
+        <li>Offer negotiation advisor</li>
+        <li>Skill gap analysis</li>
+        <li>Contract review (red-flag detection only)</li>
+        <li>GitHub integration</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <div class="phase-header">
+        <span class="phase-num">PHASE 4</span>
+        <span class="phase-title">Platform &mdash; Only After Product-Market Fit</span>
+      </div>
+      <ul>
+        <li>Team/agency mode</li>
+        <li>REST API + webhooks</li>
+        <li>White-label (designed from scratch, not bolted on)</li>
+        <li>Mobile native app</li>
+      </ul>
+    </div>
+
+    <div class="phase never">
+      <div class="phase-header">
+        <span class="phase-num" style="background:var(--cut)">NEVER</span>
+        <span class="phase-title">Permanently Remove from Roadmap</span>
+      </div>
+      <div class="phase-desc">All 8 reviewers agree these should never be built.</div>
+      <ul>
+        <li>Deepfake interview detection</li>
+        <li>Psychometric profiling (Big Five, DISC)</li>
+        <li>Video resume / AI avatar</li>
+        <li>Multi-jurisdiction tax optimizer (111 countries)</li>
+        <li>Health insurance / childcare / pension comparison</li>
+        <li>Patent activity monitoring</li>
+        <li>Automated LinkedIn engagement</li>
+        <li>Blockchain credentials</li>
+        <li>Government clearance workflows</li>
+        <li>Background check / E-Verify</li>
+        <li>Email signature optimization</li>
+        <li>Voice interaction / Apple Watch</li>
+        <li>Professional headshot generation</li>
+        <li>Mentorship matching</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- COMPETITIVE -->
+  <div class="section" id="competitive">
+    <div class="section-header">
+      <span class="section-num">07</span>
+      <h2 class="section-title">Competitive Analysis</h2>
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <h4 style="color:var(--success)">Where This Spec Wins</h4>
+        <ul style="list-style:none; padding:0;">
+          <li style="padding:4px 0; font-size:0.85rem; color:var(--text-muted);">&bull; Configurable autonomy (7/8 cited)</li>
+          <li style="padding:4px 0; font-size:0.85rem; color:var(--text-muted);">&bull; Swappable LLM + local Ollama privacy (5/8)</li>
+          <li style="padding:4px 0; font-size:0.85rem; color:var(--text-muted);">&bull; Per-job tailoring depth (5/8)</li>
+          <li style="padding:4px 0; font-size:0.85rem; color:var(--text-muted);">&bull; Audit log with decision reasoning (4/8)</li>
+          <li style="padding:4px 0; font-size:0.85rem; color:var(--text-muted);">&bull; Stealth mode for employed seekers (4/8)</li>
+          <li style="padding:4px 0; font-size:0.85rem; color:var(--text-muted);">&bull; Visa sponsorship scoring (4/8)</li>
+          <li style="padding:4px 0; font-size:0.85rem; color:var(--text-muted);">&bull; Developer-specific workflow (3/8)</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4 style="color:var(--cut)">Where Competitors Win</h4>
+        <ul style="list-style:none; padding:0;">
+          <li style="padding:4px 0; font-size:0.85rem; color:var(--text-muted);">&bull; Browser extension approach (6/8 cited)</li>
+          <li style="padding:4px 0; font-size:0.85rem; color:var(--text-muted);">&bull; Simplicity and focus (5/8)</li>
+          <li style="padding:4px 0; font-size:0.85rem; color:var(--text-muted);">&bull; Fast onboarding &mdash; 2 min vs 30+ min (4/8)</li>
+          <li style="padding:4px 0; font-size:0.85rem; color:var(--text-muted);">&bull; Proven portal coverage 50+ boards (4/8)</li>
+          <li style="padding:4px 0; font-size:0.85rem; color:var(--text-muted);">&bull; Reliability over features (4/8)</li>
+          <li style="padding:4px 0; font-size:0.85rem; color:var(--text-muted);">&bull; Open source / community (2/8)</li>
+          <li style="padding:4px 0; font-size:0.85rem; color:var(--text-muted);">&bull; International board support (2/8)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <h4 style="color:var(--nice)">Overengineered Areas</h4>
+        <p>Compensation suite (tax, insurance, pension) &bull; Company intelligence (DEI, ESG, patents, SEC) &bull; White-label/agency before PMF &bull; Career coaching features &bull; Analytics with 25+ metrics &bull; Multi-agent orchestration</p>
+      </div>
+      <div class="card">
+        <h4 style="color:var(--warn)">Underengineered Areas</h4>
+        <p>Anti-bot / CAPTCHA handling &bull; Error recovery &bull; Onboarding / trust-building &bull; LLM cost management &bull; ToS compliance strategy &bull; Portal change detection &bull; Pricing/business model &bull; International boards</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- UNIQUE INSIGHTS -->
+  <div class="section" id="insights">
+    <div class="section-header">
+      <span class="section-num">08</span>
+      <h2 class="section-title">Unique Insights Per Reviewer</h2>
+    </div>
+
+    <p>Each reviewer contributed perspectives the others missed:</p>
+
+    <div class="insight-grid">
+      <div class="insight-card">
+        <div class="reviewer-name">Gemini AI</div>
+        <ul>
+          <li>Browser extension > headless automation</li>
+          <li>LLM-based DOM analysis > static mapping</li>
+          <li>Device fingerprint randomization needed</li>
+          <li>Stateful form resume-ability</li>
+          <li>Google Sheets sync = desync liability</li>
+        </ul>
+      </div>
+      <div class="insight-card">
+        <div class="reviewer-name">KIMI AI</div>
+        <ul>
+          <li>Per-feature autonomy is "genuinely innovative"</li>
+          <li>Conflict resolution hierarchy needed</li>
+          <li>Notification escalation (SMS, call)</li>
+          <li>"Series C pitch deck, not solo dev spec"</li>
+          <li>Architectural race condition in autonomy</li>
+        </ul>
+      </div>
+      <div class="insight-card">
+        <div class="reviewer-name">Claude AI</div>
+        <ul>
+          <li>Mandatory onboarding phase (enforced)</li>
+          <li>ToS = press/reputation risk</li>
+          <li>Privacy promise dishonest for cloud case</li>
+          <li>ML needs scale that doesn't exist</li>
+          <li>10,000 Playwright sessions = wall</li>
+        </ul>
+      </div>
+      <div class="insight-card">
+        <div class="reviewer-name">Perplexity AI</div>
+        <ul>
+          <li>Human override + correction flows</li>
+          <li>Per-company policy memory</li>
+          <li>Onboarding validation (dry-run)</li>
+          <li>"Operational reliability > model quality"</li>
+          <li>Rollback for autonomous actions</li>
+        </ul>
+      </div>
+      <div class="insight-card">
+        <div class="reviewer-name">Grok AI</div>
+        <ul>
+          <li>"AI career OS" = root cause of bloat</li>
+          <li>"Learn once" is optimistic</li>
+          <li>"Never hallucinates" vs GenAI reality</li>
+          <li>Guided-mode-only MVP (most conservative)</li>
+          <li>Competitors win by being simpler</li>
+        </ul>
+      </div>
+      <div class="insight-card">
+        <div class="reviewer-name">DeepSeek AI</div>
+        <ul>
+          <li>MVP with NO AI generation (templates)</li>
+          <li>Cold-start for ML is unsolvable</li>
+          <li>Conditional form fields unaddressed</li>
+          <li>Idempotency for crash recovery</li>
+          <li>"5-10 year roadmap" (most aggressive)</li>
+        </ul>
+      </div>
+      <div class="insight-card">
+        <div class="reviewer-name">OpenAI</div>
+        <ul>
+          <li>"8 businesses in one spec"</li>
+          <li>Single litmus test for every feature</li>
+          <li>Evidence-based answer retrieval layer</li>
+          <li>Confidence + uncertainty detection</li>
+          <li>Spec: 1,000 &rarr; 300 lines</li>
+        </ul>
+      </div>
+      <div class="insight-card">
+        <div class="reviewer-name">Meta AI</div>
+        <ul>
+          <li>Server-side creds = kill shot</li>
+          <li>Gmail restricted scope needs audit</li>
+          <li>"Callback probability is astrology"</li>
+          <li>60% fail without CAPTCHA strategy</li>
+          <li>$500 overnight LLM burn risk</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ACTION PLAN -->
+  <div class="section" id="action">
+    <div class="section-header">
+      <span class="section-num">09</span>
+      <h2 class="section-title">Recommended Action Plan</h2>
+    </div>
+
+    <div class="highlight-box">
+      <div class="big-text">The Product IS Viable &mdash; Under These Conditions</div>
+      <div class="sub-text">All 8 reviewers confirm the core concept is differentiated and worth building</div>
+    </div>
+
+    <div class="action-block">
+      <h4>Immediate (This Week)</h4>
+      <ol>
+        <li>Delete all features rated CUT by 6+ reviewers (18 features gone)</li>
+        <li>Move all NICE TO HAVE features to a separate "future.md" document</li>
+        <li>Rewrite spec around the 20 consensus core features (~300-500 lines)</li>
+        <li>Add missing sections: CAPTCHA strategy, error recovery, onboarding flow, ToS compliance</li>
+      </ol>
+    </div>
+
+    <div class="action-block">
+      <h4>Before Writing Code</h4>
+      <ol>
+        <li>Decide architecture: browser extension (6/8 recommend) vs. headless automation</li>
+        <li>Define which job boards are supported via API vs. automation vs. not supported</li>
+        <li>Design credential management (OAuth preferred, local storage via extension, no server-side passwords)</li>
+        <li>Set LLM cost budgets per application and model routing strategy</li>
+      </ol>
+    </div>
+
+    <div class="action-block">
+      <h4>MVP Build Target</h4>
+      <ol>
+        <li>Support 5 portals only: LinkedIn Easy Apply, Greenhouse, Lever, Workday, Indeed</li>
+        <li>Launch in Guided/Supervised mode only &mdash; NO Full Autopilot</li>
+        <li>Prove the core loop works reliably before adding intelligence features</li>
+        <li>Target: 10 jobs/day with &lt;5% failure rate</li>
+      </ol>
+    </div>
+
+    <div class="table-wrap" style="margin-top:32px;">
+      <table>
+        <thead>
+          <tr><th>Question</th><th>Consensus Answer</th><th>Cited By</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Biggest Risk?</strong></td>
+            <td>Portal ToS enforcement / LinkedIn account bans</td>
+            <td>Claude, DeepSeek, Meta, KIMI, Grok</td>
+          </tr>
+          <tr>
+            <td><strong>Most Valuable Feature?</strong></td>
+            <td>Per-job resume tailoring + configurable autonomy + audit log</td>
+            <td>All 8</td>
+          </tr>
+          <tr>
+            <td><strong>First Thing to Change?</strong></td>
+            <td>Cut spec by 50-70%, focus on core apply loop</td>
+            <td>All 8</td>
+          </tr>
+          <tr>
+            <td><strong>Architecture Decision?</strong></td>
+            <td>Browser extension as primary form filler</td>
+            <td>6/8 (Gemini, DeepSeek, Meta, KIMI, Claude, Grok)</td>
+          </tr>
+          <tr>
+            <td><strong>Launch Mode?</strong></td>
+            <td>Supervised/Guided only &mdash; no Full Autopilot</td>
+            <td>7/8</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  <p>Combined synthesis of 8 independent AI reviews &bull; Job Application Agent Specification (1,005 lines, 74 subsections)</p>
+  <p>Despite different analysis styles and emphases, convergence on core conclusions is remarkably strong.</p>
+</div>
+
+</body>
+</html>

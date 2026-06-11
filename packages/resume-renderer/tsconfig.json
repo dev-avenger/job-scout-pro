@@ -1,0 +1,12 @@
+{
+  "extends": "@auto-job-apply/tsconfig/node.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM"],
+    "experimentalDecorators": false,
+    "emitDecoratorMetadata": false
+  },
+  "include": ["src/**/*"]
+}

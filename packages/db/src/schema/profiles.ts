@@ -19,6 +19,8 @@ export const profiles = pgTable('profiles', {
   publications: jsonb('publications'),
   volunteer: jsonb('volunteer'),
   references: jsonb('references'),
+  sectionOrder: jsonb('section_order'),
+  customSections: jsonb('custom_sections'),
   rawImport: jsonb('raw_import'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

@@ -7,7 +7,8 @@ import { SCHEDULING_SERVICE, RATE_LIMITER } from './scheduling.constants.js';
   providers: [
     { provide: SCHEDULING_SERVICE, useClass: SchedulingService },
     { provide: RATE_LIMITER, useClass: RateLimiter },
+    RateLimiter,
   ],
-  exports: [SCHEDULING_SERVICE, RATE_LIMITER],
+  exports: [SCHEDULING_SERVICE, RATE_LIMITER, RateLimiter],
 })
 export class SchedulingModule {}

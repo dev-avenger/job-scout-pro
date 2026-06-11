@@ -1,7 +1,7 @@
 import { WebSocketGateway, WebSocketServer, OnGatewayConnection, OnGatewayDisconnect, SubscribeMessage, MessageBody, ConnectedSocket } from '@nestjs/websockets';
 import { Inject, OnModuleInit } from '@nestjs/common';
 import type { Server, WebSocket } from 'ws';
-import type Redis from 'ioredis';
+import type { Redis } from 'ioredis';
 import { createLogger } from '@auto-job-apply/shared-utils';
 import { REDIS_CLIENT } from '../core/redis/redis.constants.js';
 

@@ -4,6 +4,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { LlmModule } from './llm/llm.module.js';
 import { SearchModule } from './search/search.module.js';
 import { ResumeModule } from './resume/resume.module.js';
+import { TemplatesModule } from './templates/templates.module.js';
 import { ApplicationModule } from './application/application.module.js';
 import { InboxModule } from './inbox/inbox.module.js';
 import { OutreachModule } from './outreach/outreach.module.js';
@@ -16,6 +17,7 @@ import { AgentControlModule } from './agent-control/agent-control.module.js';
 import { HealthModule } from './health/health.module.js';
 import { WebsocketModule } from './websocket/websocket.module.js';
 import { QueueModule } from './queue/queue.module.js';
+import { EventHandlersModule } from './core/event-bus/event-handlers.module.js';
 
 @Module({
   imports: [
@@ -24,6 +26,7 @@ import { QueueModule } from './queue/queue.module.js';
     LlmModule,
     SearchModule,
     ResumeModule,
+    TemplatesModule,
     ApplicationModule,
     InboxModule,
     OutreachModule,
@@ -36,6 +39,7 @@ import { QueueModule } from './queue/queue.module.js';
     HealthModule,
     WebsocketModule,
     QueueModule,
+    EventHandlersModule,
   ],
 })
 export class AppModule {}

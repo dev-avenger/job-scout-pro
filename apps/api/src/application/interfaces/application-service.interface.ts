@@ -10,4 +10,8 @@ export interface IApplicationService {
   retry(userId: string, applicationId: string): Promise<void>;
   getReviewQueue(userId: string): Promise<unknown[]>;
   getDeadLetter(userId: string): Promise<unknown[]>;
+  getKanban?(userId: string): Promise<{ columns: unknown[] }>;
+  getEvents?(userId: string, applicationId: string): Promise<unknown[]>;
+  create?(userId: string, jobId: string): Promise<{ id: string }>;
+  withdraw?(userId: string, applicationId: string): Promise<void>;
 }

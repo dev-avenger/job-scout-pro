@@ -3,20 +3,93 @@
 <head>
   <meta charset="UTF-8">
   <style>
-    body { width: 320px; padding: 16px; font-family: system-ui, sans-serif; }
-    h1 { font-size: 18px; margin: 0 0 12px; }
-    button { width: 100%; padding: 10px; margin: 4px 0; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
-    .primary { background: #3b82f6; color: white; }
-    .secondary { background: #e5e7eb; color: #374151; }
-    .status { font-size: 12px; color: #6b7280; margin-top: 8px; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { width: 360px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #f9fafb; color: #111827; }
+
+    .header { padding: 16px; background: linear-gradient(135deg, #3b82f6, #6366f1); color: white; }
+    .header h1 { font-size: 16px; font-weight: 700; }
+    .header .subtitle { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+
+    .connection { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: white; border-bottom: 1px solid #e5e7eb; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .status-dot.connected { background: #22c55e; }
+    .status-dot.disconnected { background: #ef4444; }
+    #statusText { font-size: 13px; color: #6b7280; flex: 1; }
+
+    .section { padding: 12px 16px; }
+    .section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; color: #9ca3af; letter-spacing: 0.05em; margin-bottom: 8px; }
+
+    #authSection { background: white; border-bottom: 1px solid #e5e7eb; }
+    .auth-form { display: flex; gap: 8px; }
+    .auth-form input { flex: 1; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; outline: none; }
+    .auth-form input:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
+
+    button { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s; }
+    button:hover { opacity: 0.9; }
+    button:active { transform: scale(0.98); }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-secondary { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+    .btn-danger { background: #fee2e2; color: #dc2626; }
+    .btn-success { background: #22c55e; color: white; }
+    .btn-full { width: 100%; margin: 4px 0; display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+    .actions { display: flex; flex-direction: column; gap: 6px; }
+
+    .capture-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
+    .capture-item:last-child { border-bottom: none; }
+    .capture-icon { font-size: 16px; width: 24px; text-align: center; }
+    .capture-info { flex: 1; min-width: 0; }
+    .capture-title { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .capture-time { font-size: 11px; color: #9ca3af; }
+    .empty { font-size: 13px; color: #9ca3af; text-align: center; padding: 16px 0; }
+
+    .status { font-size: 12px; text-align: center; padding: 4px 0; min-height: 20px; transition: all 0.2s; }
+    .status.success { color: #16a34a; }
+    .status.error { color: #dc2626; }
+    .status.info { color: #3b82f6; }
+
+    #disconnectBtn { font-size: 11px; padding: 4px 10px; }
   </style>
 </head>
 <body>
-  <h1>Auto Job Apply</h1>
-  <button class="primary" id="saveJob">Save This Job</button>
-  <button class="secondary" id="captureForm">Capture Form Fields</button>
-  <button class="secondary" id="openDashboard">Open Dashboard</button>
-  <div class="status" id="status"></div>
+  <div class="header">
+    <h1>Auto Job Apply</h1>
+    <div class="subtitle">Job search automation assistant</div>
+  </div>
+
+  <div class="connection" id="connectionStatus">
+    <span class="status-dot disconnected" id="statusDot"></span>
+    <span id="statusText">Checking...</span>
+    <button class="btn-danger" id="disconnectBtn" style="display:none">Disconnect</button>
+  </div>
+
+  <div class="section" id="authSection" style="display:none">
+    <div class="section-title">Connect to Dashboard</div>
+    <div class="auth-form">
+      <input type="text" id="tokenInput" placeholder="Paste your auth token..." />
+      <button class="btn-primary" id="connectBtn">Connect</button>
+    </div>
+  </div>
+
+  <div id="actionsSection" style="display:none">
+    <div class="section">
+      <div class="section-title">Actions</div>
+      <div class="actions">
+        <button class="btn-primary btn-full" id="saveJob">Save This Job</button>
+        <button class="btn-secondary btn-full" id="captureForm">Capture Form Fields</button>
+        <button class="btn-secondary btn-full" id="openDashboard">Open Dashboard</button>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Recent Captures</div>
+      <div id="recentCaptures">
+        <div class="empty">No recent captures</div>
+      </div>
+    </div>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>

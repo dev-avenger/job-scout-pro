@@ -68,6 +68,27 @@ export const CertificationSchema = z.object({
 });
 export type Certification = z.infer<typeof CertificationSchema>;
 
+export const CustomSectionFieldSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+});
+export type CustomSectionField = z.infer<typeof CustomSectionFieldSchema>;
+
+export const CustomSectionItemSchema = z.object({
+  id: z.string(),
+  fields: z.array(CustomSectionFieldSchema),
+});
+export type CustomSectionItem = z.infer<typeof CustomSectionItemSchema>;
+
+export const CustomSectionSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string().min(1).max(100),
+  /** Render style: list of entries, label/value rows, or free paragraph */
+  type: z.enum(['list', 'keyValue', 'paragraph']).default('list'),
+  items: z.array(CustomSectionItemSchema).default([]),
+});
+export type CustomSection = z.infer<typeof CustomSectionSchema>;
+
 export const ProfileSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),
@@ -85,6 +106,7 @@ export const ProfileSchema = z.object({
   publications: z.array(z.object({ title: z.string(), venue: z.string(), date: z.string(), url: z.string().optional() })).default([]),
   volunteer: z.array(z.object({ role: z.string(), organization: z.string(), description: z.string().optional() })).default([]),
   references: z.array(z.object({ name: z.string(), title: z.string(), contact: z.string() })).default([]),
+  customSections: z.array(CustomSectionSchema).default([]),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

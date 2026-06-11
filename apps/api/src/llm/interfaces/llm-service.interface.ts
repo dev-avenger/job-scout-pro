@@ -1,8 +1,10 @@
 import type { ZodSchema } from 'zod';
 import type { AgentContext, ModelTier, TaskType } from '@auto-job-apply/shared-types';
 import type { LLMGenerateParams, LLMResponse, LLMStructuredResponse } from './llm-provider.interface.js';
+import type { PromptRegistry } from '../prompt-registry.js';
 
 export interface ILLMService {
+  readonly promptRegistry: PromptRegistry;
   generateText(
     taskType: TaskType,
     params: Omit<LLMGenerateParams, 'model'>,

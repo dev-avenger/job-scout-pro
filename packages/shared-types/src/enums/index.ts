@@ -30,6 +30,7 @@ export const SourceChannel = z.enum([
   'rss_feed',
   'manual_url',
   'email_forward',
+  'csv_import',
 ]);
 export type SourceChannel = z.infer<typeof SourceChannel>;
 

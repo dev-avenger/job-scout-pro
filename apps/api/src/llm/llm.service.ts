@@ -1,7 +1,7 @@
 import { Injectable, Inject, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { ZodSchema } from 'zod';
-import type Redis from 'ioredis';
+import type { Redis } from 'ioredis';
 import type { AgentContext, ModelTier, TaskType } from '@auto-job-apply/shared-types';
 import { createLogger } from '@auto-job-apply/shared-utils';
 import { REDIS_CLIENT } from '../core/redis/redis.constants.js';

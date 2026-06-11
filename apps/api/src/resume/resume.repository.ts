@@ -59,6 +59,23 @@ export class ResumeRepository implements IResumeRepository {
     await this.db.delete(profiles).where(eq(profiles.id, profileId));
   }
 
+  /* ---- Section CRUD (JSONB array columns) ---- */
+
+  async getSectionItems(userId: string, profileId: string, sectionType: string): Promise<unknown[]> {
+    const profile = await this.getProfile(userId, profileId) as Record<string, unknown> | null;
+    if (!profile) return [];
+    const items = (profile[sectionType] as unknown[]) ?? [];
+    return items;
+  }
+
+  async upsertSectionColumn(userId: string, profileId: string, sectionType: string, items: unknown[]): Promise<void> {
+    await this.db.update(profiles)
+      .set({ [sectionType]: items, updatedAt: new Date() } as any)
+      .where(and(eq(profiles.id, profileId), eq(profiles.userId, userId)));
+  }
+
+  /* ---- Resume Versions ---- */
+
   async listResumeVersions(userId: string, profileId?: string) {
     if (profileId) {
       return this.db.query.resumeVersions.findMany({
@@ -71,9 +88,21 @@ export class ResumeRepository implements IResumeRepository {
     });
   }
 
+  async getResumeVersion(userId: string, profileId: string, versionId: string) {
+    const version = await this.db.query.resumeVersions.findFirst({
+      where: and(eq(resumeVersions.id, versionId), eq(resumeVersions.profileId, profileId)),
+    });
+    return version ?? null;
+  }
+
   async createResumeVersion(data: Record<string, unknown>) {
     const id = generateId();
     await this.db.insert(resumeVersions).values({ id, ...data } as any);
     return { id };
+  }
+
+  async deleteResumeVersion(userId: string, profileId: string, versionId: string) {
+    await this.db.delete(resumeVersions)
+      .where(and(eq(resumeVersions.id, versionId), eq(resumeVersions.profileId, profileId)));
   }
 }

@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import type Redis from 'ioredis';
+import type { Redis } from 'ioredis';
 import { REDIS_CLIENT } from '../core/redis/redis.constants.js';
 import type { IAgentControlService } from './interfaces/agent-control-service.interface.js';
 

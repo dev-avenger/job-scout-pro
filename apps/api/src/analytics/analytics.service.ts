@@ -15,6 +15,10 @@ export class AnalyticsService implements IAnalyticsService {
     return this.repo.getFunnel(userId);
   }
 
+  async getVolume(userId: string, days: number) {
+    return this.repo.getVolume(userId, days);
+  }
+
   async getLlmSpend(userId: string) {
     const [dailySpendCents, monthlySpendCents, totalSpendCents] = await Promise.all([
       this.repo.getDailySpend(userId),

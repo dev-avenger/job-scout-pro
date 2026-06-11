@@ -14,6 +14,12 @@ export class NotificationsController {
     return this.notificationsService.list(user.sub);
   }
 
+  @Get('notifications/unread-count')
+  async unreadCount(@CurrentUser() user: JwtPayload) {
+    const count = await this.notificationsService.getUnreadCount?.(user.sub) ?? 0;
+    return { count };
+  }
+
   @Put('notifications/:id/read')
   @HttpCode(HttpStatus.NO_CONTENT)
   async markAsRead(@Param('id') id: string) {
@@ -24,6 +30,12 @@ export class NotificationsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async markAllAsRead(@CurrentUser() user: JwtPayload) {
     await this.notificationsService.markAllAsRead(user.sub);
+  }
+
+  @Delete('notifications/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteNotification(@Param('id') id: string) {
+    await this.notificationsService.delete?.(id);
   }
 
   @Get('alerts/rules')

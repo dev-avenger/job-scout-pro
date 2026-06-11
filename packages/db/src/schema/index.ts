@@ -7,3 +7,4 @@ export * from './portals.js';
 export * from './outreach.js';
 export * from './llm.js';
 export * from './notifications.js';
+export * from './templates.js';

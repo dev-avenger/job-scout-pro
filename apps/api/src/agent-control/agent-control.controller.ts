@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, UseGuards, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Delete, UseGuards, Inject, Body } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { CurrentUser, type JwtPayload } from '../common/decorators/current-user.decorator.js';
 import { AGENT_CONTROL_SERVICE } from './agent-control.constants.js';
@@ -12,6 +12,11 @@ export class AgentControlController {
   @Get('agent/status')
   async getStatus(@CurrentUser() user: JwtPayload) {
     return this.agentControlService.getStatus(user.sub);
+  }
+
+  @Get('agent/queue-stats')
+  async getQueueStats(@CurrentUser() user: JwtPayload) {
+    return this.agentControlService.getQueueStats?.(user.sub) ?? { queues: [] };
   }
 
   @Post('agent/pause')
@@ -30,18 +35,12 @@ export class AgentControlController {
   }
 
   @Post('data/export')
-  async exportData() {
-    return {
-      status: 'queued',
-      message: 'Data export has been queued. You will receive a download link via email.',
-    };
+  async exportData(@CurrentUser() user: JwtPayload) {
+    return this.agentControlService.exportData?.(user.sub) ?? { status: 'queued', message: 'Data export queued' };
   }
 
   @Delete('data/delete')
-  async deleteData() {
-    return {
-      status: 'confirmation_required',
-      message: 'Please confirm deletion by providing your password.',
-    };
+  async deleteData(@CurrentUser() user: JwtPayload, @Body() body: { confirmPassword?: string }) {
+    return this.agentControlService.deleteData?.(user.sub) ?? { status: 'confirmation_required' };
   }
 }

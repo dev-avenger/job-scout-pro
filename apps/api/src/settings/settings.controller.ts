@@ -42,4 +42,31 @@ export class SettingsController {
   ) {
     await this.settingsService.updateBlacklists(user.sub, body);
   }
+
+  @Put('preferences')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async updatePreferences(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: Record<string, unknown>,
+  ) {
+    await this.settingsService.updatePreferences?.(user.sub, body);
+  }
+
+  @Put('email')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async updateEmailConfig(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { imapHost?: string; imapPort?: number; smtpHost?: string; smtpPort?: number; emailUser?: string; emailPass?: string },
+  ) {
+    await this.settingsService.updateEmailConfig?.(user.sub, body);
+  }
+
+  @Put('api-keys')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async updateApiKeys(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { openaiKey?: string; anthropicKey?: string },
+  ) {
+    await this.settingsService.updateApiKeys?.(user.sub, body);
+  }
 }

@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import type Redis from 'ioredis';
+import type { Redis } from 'ioredis';
 import type { DomainEvent, EventType } from '@auto-job-apply/shared-types';
 import { createLogger } from '@auto-job-apply/shared-utils';
 import { REDIS_CLIENT } from '../redis/redis.constants.js';

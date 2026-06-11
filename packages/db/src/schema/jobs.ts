@@ -1,4 +1,4 @@
-import { boolean, doublePrecision, index, integer, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { boolean, doublePrecision, index, integer, jsonb, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 
 import { companies } from './companies.js';
 import { users } from './users.js';

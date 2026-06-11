@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Inject } from '@nestjs/common';
+import { Controller, Get, UseGuards, Inject, Query } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { CurrentUser, type JwtPayload } from '../common/decorators/current-user.decorator.js';
 import { ANALYTICS_SERVICE } from './analytics.constants.js';
@@ -17,6 +17,12 @@ export class AnalyticsController {
   @Get('analytics/funnel')
   async getFunnel(@CurrentUser() user: JwtPayload) {
     return this.analyticsService.getFunnel(user.sub);
+  }
+
+  @Get('analytics/volume')
+  async getVolume(@CurrentUser() user: JwtPayload, @Query('days') days?: string) {
+    const numDays = Math.min(Math.max(parseInt(days || '30', 10) || 30, 1), 365);
+    return this.analyticsService.getVolume(user.sub, numDays);
   }
 
   @Get('monitoring/llm/spend')

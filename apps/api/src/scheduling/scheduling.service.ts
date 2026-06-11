@@ -1,6 +1,6 @@
 import { Injectable, Inject, OnModuleInit } from '@nestjs/common';
 import { Queue } from 'bullmq';
-import type Redis from 'ioredis';
+import type { Redis } from 'ioredis';
 import { createLogger } from '@auto-job-apply/shared-utils';
 import { REDIS_CLIENT } from '../core/redis/redis.constants.js';
 import type { ISchedulingService } from './interfaces/scheduling-service.interface.js';

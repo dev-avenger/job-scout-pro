@@ -11,6 +11,6 @@ export class ManualUrlSource implements IJobSource {
   }
 
   async validate(job: any) {
-    return { isValid: true };
+    return { isValid: true, status: 'valid' as const };
   }
 }

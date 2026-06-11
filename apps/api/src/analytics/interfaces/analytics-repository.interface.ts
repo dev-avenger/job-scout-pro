@@ -1,6 +1,7 @@
 export interface IAnalyticsRepository {
   getOverview(userId: string): Promise<{ totalJobs: number; totalApplications: number; pendingApplications: number; interviews: number; offers: number }>;
   getFunnel(userId: string): Promise<Record<string, number>>;
+  getVolume(userId: string, days: number): Promise<{ date: string; count: number }[]>;
   getDailySpend(userId: string): Promise<number>;
   getMonthlySpend(userId: string): Promise<number>;
   getTotalSpend(userId: string): Promise<number>;

@@ -1,4 +1,6 @@
 import { Controller, Get, Post, Delete, Param, Query, Body, UseGuards, Inject, HttpCode, HttpStatus } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { JobFilterSchema, CreateJobFromUrlSchema } from '@auto-job-apply/shared-types';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { CurrentUser, type JwtPayload } from '../common/decorators/current-user.decorator.js';
@@ -9,7 +11,10 @@ import type { ISearchService } from './interfaces/search-service.interface.js';
 @Controller('api/v1/jobs')
 @UseGuards(JwtAuthGuard)
 export class SearchController {
-  constructor(@Inject(SEARCH_SERVICE) private readonly searchService: ISearchService) {}
+  constructor(
+    @Inject(SEARCH_SERVICE) private readonly searchService: ISearchService,
+    @InjectQueue('job-search') private readonly jobSearchQueue: Queue,
+  ) {}
 
   @Get()
   async listJobs(
@@ -40,6 +45,7 @@ export class SearchController {
 
   @Post('search/run')
   async runSearch(@CurrentUser() user: JwtPayload) {
+    await this.jobSearchQueue.add('manual-search', { userId: user.sub, trigger: 'manual' });
     return { message: 'Search queued', status: 'queued' };
   }
 }

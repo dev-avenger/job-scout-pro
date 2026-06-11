@@ -4,3 +4,4 @@ export * from './application.js';
 export * from './resume.js';
 export * from './company.js';
 export * from './llm.js';
+export * from './template.js';
