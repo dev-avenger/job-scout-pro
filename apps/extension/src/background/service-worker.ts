@@ -97,6 +97,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'SUBMIT_ASSISTED') {
+    // Hand the prepared application to the server's assisted-submit flow. This
+    // honors the user's autonomy mode (supervised waits for review; autonomous
+    // submits) — the extension does not bypass that gate.
+    apiRequest(`/applications/${message.applicationId}/submit-assisted`, { method: 'POST' })
+      .then((data) => sendResponse({ success: true, data }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (message.type === 'GET_APPLICATION_STATUS') {
+    apiRequest(`/applications/${message.applicationId}`)
+      .then((data) => sendResponse({ success: true, status: data?.status ?? null, data }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
   if (message.type === 'SET_AUTH_TOKEN') {
     chrome.storage.local.set({ authToken: message.token }, () => {
       sendResponse({ success: true });

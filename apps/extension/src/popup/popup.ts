@@ -1,6 +1,8 @@
 // ---- State ----
 let isConnected = false;
 let authToken: string | null = null;
+/** Set after a successful autofill so assisted-submit knows which application. */
+let lastApplicationId: string | null = null;
 
 // ---- Initialization ----
 async function init() {
@@ -68,6 +70,7 @@ async function loadRecentCaptures() {
 // ---- Event Listeners ----
 function setupEventListeners() {
   document.getElementById('autofillForm')?.addEventListener('click', handleAutofill);
+  document.getElementById('submitAssisted')?.addEventListener('click', handleSubmitAssisted);
   document.getElementById('saveJob')?.addEventListener('click', handleSaveJob);
   document.getElementById('captureForm')?.addEventListener('click', handleCaptureForm);
   document.getElementById('openDashboard')?.addEventListener('click', handleOpenDashboard);
@@ -142,17 +145,59 @@ async function handleAutofill() {
     return;
   }
 
+  // Remember the matched application so assisted-submit can target it.
+  lastApplicationId = res.data.applicationId ?? null;
+
   // 2) Tell the content script to fill the form in THIS (the user's) browser.
   chrome.tabs.sendMessage(tab.id, { type: 'AUTOFILL', answers: res.data.answers }, (fill) => {
     if (fill?.success) {
       statusEl.innerHTML = `Filled ${fill.filled} fields. <b>Attach your resume, solve the human check, and submit.</b>`;
       statusEl.className = 'status success';
+      // Reveal the assisted-submit option now that we have a matched application.
+      const submitBtn = document.getElementById('submitAssisted');
+      if (submitBtn && lastApplicationId) submitBtn.style.display = 'flex';
     } else {
       statusEl.textContent = fill?.error || 'Could not fill the form on this page.';
       statusEl.className = 'status error';
     }
     setTimeout(() => { statusEl.className = 'status'; }, 8000);
   });
+}
+
+/**
+ * Hand the matched application to the server's assisted-submit flow, then poll
+ * its status so the user sees live progress. Submission behavior is governed by
+ * the user's autonomy mode server-side — this does not force a submit.
+ */
+async function handleSubmitAssisted() {
+  if (!lastApplicationId) return;
+  const statusEl = document.getElementById('status')!;
+  statusEl.textContent = 'Starting assisted submit…';
+  statusEl.className = 'status info';
+
+  const res = await sendMessage({ type: 'SUBMIT_ASSISTED', applicationId: lastApplicationId });
+  if (!res?.success) {
+    statusEl.textContent = res?.error || 'Could not start assisted submit.';
+    statusEl.className = 'status error';
+    return;
+  }
+
+  // Poll the application status for ~60s (every 3s) and surface it live.
+  const terminal = new Set(['submitted', 'needs_captcha', 'failed', 'withdrawn']);
+  let polls = 0;
+  const poll = async () => {
+    polls += 1;
+    const s = await sendMessage({ type: 'GET_APPLICATION_STATUS', applicationId: lastApplicationId });
+    const status = s?.success ? (s.status as string | null) : null;
+    if (status) {
+      const label = status.replace(/_/g, ' ');
+      statusEl.textContent = `Status: ${label}`;
+      statusEl.className = `status ${terminal.has(status) ? (status === 'submitted' ? 'success' : 'info') : 'info'}`;
+      if (terminal.has(status)) return;
+    }
+    if (polls < 20) setTimeout(poll, 3000);
+  };
+  void poll();
 }
 
 function handleOpenDashboard() {
