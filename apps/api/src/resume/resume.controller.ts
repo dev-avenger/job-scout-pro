@@ -14,6 +14,7 @@ import { getTemplateConfig } from './export/template-registry.js';
 import { ResumeTailorAgent } from './agents/resume-tailor.agent.js';
 import { CoverLetterAgent } from './agents/cover-letter.agent.js';
 import { ResumeExtractorAgent } from './agents/resume-extractor.agent.js';
+import { AtsAnalysisAgent } from './agents/ats-analysis.agent.js';
 import { AtsScorer } from './ats-scorer.js';
 import type { LayoutType, ThemeType } from '@auto-job-apply/shared-types';
 import { TemplateConfigSchema, BuilderLayoutStateSchema, BuilderLayoutStateV2Schema, migrateLayoutState, legacyPlacementFromLayout } from '@auto-job-apply/shared-types';
@@ -193,6 +194,7 @@ export class ResumeController {
     private readonly coverLetterAgent: CoverLetterAgent,
     private readonly resumeExtractorAgent: ResumeExtractorAgent,
     private readonly atsScorer: AtsScorer,
+    private readonly atsAnalysisAgent: AtsAnalysisAgent,
   ) {}
 
   /* ======================================================================== */
@@ -399,10 +401,27 @@ export class ResumeController {
   async scoreProfileAts(
     @CurrentUser() user: JwtPayload,
     @Param('profileId') profileId: string,
-    @Body() body: { jobDescription?: string },
+    @Body() body: { jobDescription?: string; deep?: boolean },
   ) {
     const profile = await this.resumeService.getProfile(user.sub, profileId) as Record<string, unknown>;
-    return this.atsScorer.score(profile, body.jobDescription);
+    const heuristic = this.atsScorer.score(profile, body.jobDescription);
+
+    // Fast heuristic is always returned. When `deep` is requested AND a job
+    // description is present, layer on the LLM semantic analysis; if the LLM is
+    // unavailable (quota/provider), degrade gracefully to the heuristic.
+    if (body.deep && body.jobDescription) {
+      try {
+        const { analysis, costCents } = await this.atsAnalysisAgent.analyze(
+          profile,
+          body.jobDescription,
+          { userId: user.sub },
+        );
+        return { ...heuristic, analysis, llmCostCents: costCents };
+      } catch {
+        return { ...heuristic, analysisError: 'AI analysis is temporarily unavailable.' };
+      }
+    }
+    return heuristic;
   }
 
   /* ======================================================================== */
