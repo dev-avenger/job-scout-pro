@@ -4,13 +4,27 @@ import type { AgentContext } from '@auto-job-apply/shared-types';
 import { AnswerBank } from './answer-bank.js';
 import { FormFillerAgent } from './agents/form-filler.agent.js';
 import type { FormField } from './agents/dom-analyzer.agent.js';
+import { bestOptionMatch } from './field-match.js';
 
 const logger = createLogger({ name: 'ats-apply' });
 
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 
-export type AtsType = 'greenhouse' | 'workable' | 'lever' | 'unknown';
+/**
+ * `greenhouse|workable|lever|smartrecruiters` have a known form schema we can
+ * prepare against. `workday|successfactors` are detected (so the pipeline can
+ * route them to the browser path and analytics can see them) but have no public
+ * form API — `fetchFormSchema` returns null for them.
+ */
+export type AtsType =
+  | 'greenhouse'
+  | 'workable'
+  | 'lever'
+  | 'smartrecruiters'
+  | 'workday'
+  | 'successfactors'
+  | 'unknown';
 
 export interface PreparedAnswer {
   fieldId: string;
@@ -98,6 +112,16 @@ export class AtsApplyService {
       if (host === 'jobs.lever.co' && parts.length >= 2) {
         return { type: 'lever', ref: { company: parts[0], jobId: parts[1] } };
       }
+      if (host.includes('smartrecruiters.com')) {
+        // jobs.smartrecruiters.com/{Company}/{postingId}-{slug}
+        return { type: 'smartrecruiters', ref: { company: parts[0], jobId: parts[1] } };
+      }
+      if (host.includes('myworkdayjobs.com') || host.includes('myworkday.com')) {
+        return { type: 'workday', ref: { company: host.split('.')[0] } };
+      }
+      if (host.includes('successfactors') || host.includes('sapsf')) {
+        return { type: 'successfactors', ref: { company: host.split('.')[0] } };
+      }
       return { type: 'unknown' };
     } catch {
       return { type: 'unknown' };
@@ -178,7 +202,23 @@ export class AtsApplyService {
           ];
           return { atsType: 'lever', fields };
         }
+        case 'smartrecruiters': {
+          // SmartRecruiters screening questions are not reliably public, but the
+          // universal fields always exist — prepare those deterministically so
+          // the browser fill has names/contact/resume ready.
+          const fields: NormalizedField[] = [
+            { id: 'firstName', label: 'First name', type: 'text', required: true },
+            { id: 'lastName', label: 'Last name', type: 'text', required: true },
+            { id: 'email', label: 'Email', type: 'email', required: true },
+            { id: 'phoneNumber', label: 'Phone', type: 'phone', required: false },
+            { id: 'location', label: 'Location', type: 'text', required: false },
+            { id: 'linkedinProfileUrl', label: 'LinkedIn URL', type: 'text', required: false },
+            { id: 'resume', label: 'Resume', type: 'file', required: true },
+          ];
+          return { atsType: 'smartrecruiters', fields };
+        }
         default:
+          // workday / successfactors / unknown: no public form schema.
           return null;
       }
     } catch (err) {
@@ -287,7 +327,11 @@ export class AtsApplyService {
       const saved = await this.answerBank.findByLabel(userId, field.label);
       if (saved) {
         await this.answerBank.incrementUsage(saved.id);
-        answers.push({ ...this.base(field), value: saved.answerText, source: 'saved_answer' });
+        answers.push({
+          ...this.base(field),
+          value: this.snapToOption(field, saved.answerText),
+          source: 'saved_answer',
+        });
         continue;
       }
       needsLlm.push(field);
@@ -314,7 +358,7 @@ export class AtsApplyService {
         for (const field of needsLlm) {
           const generated = result.answers.find((a) => a.selector === field.id || a.label === field.label);
           if (generated && generated.value && generated.confidence >= 0.5) {
-            answers.push({ ...this.base(field), value: generated.value, source: 'generated' });
+            answers.push({ ...this.base(field), value: this.snapToOption(field, generated.value), source: 'generated' });
             await this.answerBank.save(userId, field.label, generated.value, field.type, 'generated');
           } else {
             answers.push({ ...this.base(field), value: null, source: 'unanswered' });
@@ -353,5 +397,15 @@ export class AtsApplyService {
 
   private base(field: NormalizedField): Omit<PreparedAnswer, 'value' | 'source'> {
     return { fieldId: field.id, label: field.label, type: field.type, required: field.required };
+  }
+
+  /**
+   * For fields with a fixed option set (selects/radios), coerce a free-text
+   * answer onto the closest allowed option so the value is actually submittable.
+   * Falls back to the original value when no option is close enough.
+   */
+  private snapToOption(field: NormalizedField, value: string): string {
+    if (!value || !field.options || field.options.length === 0) return value;
+    return bestOptionMatch(value, field.options) ?? value;
   }
 }
