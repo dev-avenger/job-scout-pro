@@ -29,4 +29,7 @@ export const userPreferences = pgTable('user_preferences', {
   stealthMode: boolean('stealth_mode').default(false),
   activityHours: jsonb('activity_hours'),
   notificationChannels: jsonb('notification_channels'),
+  // Free-form bag for UI-level settings (LLM provider config, job source
+  // toggles, notification prefs) that don't warrant dedicated columns.
+  uiSettings: jsonb('ui_settings'),
 });

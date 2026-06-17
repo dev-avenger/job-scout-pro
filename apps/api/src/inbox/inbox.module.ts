@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
 import { LlmModule } from '../llm/llm.module.js';
 import { InboxController } from './inbox.controller.js';
 import { InboxService } from './inbox.service.js';
@@ -10,7 +11,7 @@ import { EmailParser } from './email/email-parser.js';
 import { INBOX_SERVICE, INBOX_REPOSITORY } from './inbox.constants.js';
 
 @Module({
-  imports: [LlmModule],
+  imports: [LlmModule, BullModule.registerQueue({ name: 'inbox-scan' })],
   controllers: [InboxController],
   providers: [
     { provide: INBOX_REPOSITORY, useClass: InboxRepository },

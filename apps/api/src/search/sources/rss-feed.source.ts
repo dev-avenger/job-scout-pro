@@ -3,14 +3,15 @@ import RssParser from 'rss-parser';
 import type { IJobSource } from '../interfaces/job-source.interface.js';
 import type { RawJobListing, SearchCriteria, JobValidationResult } from '@auto-job-apply/shared-types';
 import { createLogger } from '@auto-job-apply/shared-utils';
+import { matchesKeywords } from '../keyword-match.js';
 
 const logger = createLogger({ name: 'rss-feed-source' });
 
-// Default job board RSS feeds
+// Default job board RSS feeds (key-free, working endpoints —
+// the old stackoverflow.com/jobs feed is dead and remoteok now has a dedicated source)
 const DEFAULT_FEEDS = [
-  'https://stackoverflow.com/jobs/feed',
-  'https://weworkremotely.com/remote-jobs.rss',
-  'https://remoteok.com/remote-jobs.rss',
+  'https://weworkremotely.com/categories/remote-programming-jobs.rss',
+  'https://remotive.com/remote-jobs/feed',
 ];
 
 @Injectable()
@@ -26,7 +27,13 @@ export class RssFeedSource implements IJobSource {
 
   async *search(criteria: SearchCriteria): AsyncGenerator<RawJobListing> {
     const parser = new RssParser();
-    const feedUrls = this.customFeedUrls.length > 0 ? this.customFeedUrls : DEFAULT_FEEDS;
+    // Per-user feeds from the search criteria win, then instance-level custom
+    // feeds, then the built-in defaults.
+    const feedUrls = criteria.rssFeedUrls?.length
+      ? criteria.rssFeedUrls
+      : this.customFeedUrls.length > 0
+        ? this.customFeedUrls
+        : DEFAULT_FEEDS;
     const keywords = criteria.keywords.map(k => k.toLowerCase());
     const excludeCompanies = criteria.excludeCompanies?.map(c => c.toLowerCase()) || [];
 
@@ -41,7 +48,7 @@ export class RssFeedSource implements IJobSource {
           const fullText = (title + ' ' + description).toLowerCase();
 
           // Filter by keywords if provided
-          if (keywords.length > 0 && !keywords.some(kw => fullText.includes(kw))) {
+          if (!matchesKeywords(fullText, keywords)) {
             continue;
           }
 

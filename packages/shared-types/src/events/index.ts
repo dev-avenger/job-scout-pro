@@ -174,7 +174,73 @@ export const UserActionEvent = BaseEventSchema.extend({
   }),
 });
 
+export const InboxScanStartedEvent = BaseEventSchema.extend({
+  type: z.literal('inbox.scan.started'),
+  data: z.object({}),
+});
+
+export const InboxScanSkippedEvent = BaseEventSchema.extend({
+  type: z.literal('inbox.scan.skipped'),
+  data: z.object({ reason: z.string() }),
+});
+
+export const InboxScanCompletedEvent = BaseEventSchema.extend({
+  type: z.literal('inbox.scan.completed'),
+  data: z.object({
+    fetched: z.number(),
+    classified: z.number(),
+  }),
+});
+
+export const SearchSkippedEvent = BaseEventSchema.extend({
+  type: z.literal('search.skipped'),
+  data: z.object({ reason: z.string() }),
+});
+
+export const SearchStartedEvent = BaseEventSchema.extend({
+  type: z.literal('search.started'),
+  data: z.object({
+    keywords: z.array(z.string()),
+    sourceCount: z.number(),
+  }),
+});
+
+export const SearchSourceStartedEvent = BaseEventSchema.extend({
+  type: z.literal('search.source.started'),
+  data: z.object({ source: z.string() }),
+});
+
+export const SearchSourceCompletedEvent = BaseEventSchema.extend({
+  type: z.literal('search.source.completed'),
+  data: z.object({
+    source: z.string(),
+    discovered: z.number(),
+  }),
+});
+
+export const SearchSourceFailedEvent = BaseEventSchema.extend({
+  type: z.literal('search.source.failed'),
+  data: z.object({
+    source: z.string(),
+    error: z.string(),
+  }),
+});
+
+export const SearchCompletedEvent = BaseEventSchema.extend({
+  type: z.literal('search.completed'),
+  data: z.object({ discovered: z.number() }),
+});
+
 export const DomainEventSchema = z.discriminatedUnion('type', [
+  InboxScanStartedEvent,
+  InboxScanSkippedEvent,
+  InboxScanCompletedEvent,
+  SearchSkippedEvent,
+  SearchStartedEvent,
+  SearchSourceStartedEvent,
+  SearchSourceCompletedEvent,
+  SearchSourceFailedEvent,
+  SearchCompletedEvent,
   JobDiscoveredEvent,
   JobValidatedEvent,
   JobExpiredEvent,

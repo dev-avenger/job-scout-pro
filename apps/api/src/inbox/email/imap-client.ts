@@ -35,6 +35,9 @@ export class ImapClient {
       auth: config.auth,
       logger: false,
     });
+    // ImapFlow can emit late async socket errors (e.g. ETIMEOUT) after the
+    // awaited call already rejected; without a listener they crash the process.
+    client.on('error', (err) => logger.warn({ error: err }, 'IMAP socket error'));
 
     const emails: FetchedEmail[] = [];
 
@@ -91,6 +94,9 @@ export class ImapClient {
       auth: config.auth,
       logger: false,
     });
+    // Swallow late async socket errors (e.g. ETIMEOUT after connect() already
+    // rejected) — without a listener they crash the whole process.
+    client.on('error', () => {});
 
     try {
       await client.connect();

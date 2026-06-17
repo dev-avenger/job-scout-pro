@@ -12,6 +12,7 @@ import {
   SelectItem,
 } from '../components/ui/select';
 import { apiClient } from '../api/client';
+import { PageHeader } from '../components/PageHeader';
 import {
   Search,
   Plus,
@@ -27,6 +28,7 @@ import {
   ChevronUp,
   SlidersHorizontal,
   Send,
+  CheckCircle2,
 } from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
@@ -47,6 +49,9 @@ interface Job {
   description?: string;
   requiredSkills?: string[];
   sourceUrl?: string;
+  /** Status of the user's application for this job, if any. */
+  applicationStatus?: string | null;
+  appliedAt?: string | null;
 }
 
 interface JobsResponse {
@@ -79,6 +84,20 @@ const STATUS_LABEL: Record<Job['validationStatus'], string> = {
   pending: 'Pending',
   invalid: 'Invalid',
   expired: 'Expired',
+};
+
+/** Application-status → badge label + variant for the "applied" indicator. */
+const APPLIED_CONFIG: Record<string, { label: string; variant: 'success' | 'warning' | 'secondary' | 'destructive' }> = {
+  queued: { label: 'Queued', variant: 'warning' },
+  in_progress: { label: 'Applying…', variant: 'warning' },
+  needs_captcha: { label: 'Needs CAPTCHA', variant: 'warning' },
+  needs_login: { label: 'Needs login', variant: 'warning' },
+  pending_review: { label: 'Awaiting review', variant: 'warning' },
+  submitted: { label: 'Applied', variant: 'success' },
+  interview: { label: 'Interview', variant: 'success' },
+  offer: { label: 'Offer', variant: 'success' },
+  rejected: { label: 'Rejected', variant: 'destructive' },
+  failed: { label: 'Failed', variant: 'destructive' },
 };
 
 function formatDate(dateStr: string) {
@@ -143,8 +162,9 @@ export function JobQueue() {
   /* ---- data state ---- */
   const [jobs, setJobs] = useState<Job[]>([]);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(0);
   const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [facets, setFacets] = useState<{ sources: string[]; countries: string[] }>({ sources: [], countries: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -162,28 +182,15 @@ export function JobQueue() {
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [countryFilter, setCountryFilter] = useState<string>('all');
 
-  /* ---- derived: unique sources ---- */
-  const uniqueSources = useMemo(() => {
-    const sources = new Set(jobs.map((j) => j.sourceChannel));
-    return Array.from(sources).sort();
-  }, [jobs]);
+  /* ---- filter options span ALL jobs (from server facets) ---- */
+  const uniqueSources = facets.sources;
+  const countryOptions = facets.countries;
 
-  /* ---- derived: filtered & sorted jobs ---- */
-  const filteredJobs = useMemo(() => {
-    let result = [...jobs];
-
-    // Status filter
-    if (statusFilter !== 'all') {
-      result = result.filter((j) => j.validationStatus === statusFilter);
-    }
-
-    // Source filter
-    if (sourceFilter !== 'all') {
-      result = result.filter((j) => j.sourceChannel === sourceFilter);
-    }
-
-    // Sort
+  /* ---- sort the current server page (filtering is server-side) ---- */
+  const pagedJobs = useMemo(() => {
+    const result = [...jobs];
     result.sort((a, b) => {
       switch (sortBy) {
         case 'newest':
@@ -198,30 +205,49 @@ export function JobQueue() {
           return 0;
       }
     });
-
     return result;
-  }, [jobs, sortBy, statusFilter, sourceFilter]);
+  }, [jobs, sortBy]);
+  const clientTotalPages = totalPages;
 
-  /* ---- data fetching ---- */
-  const fetchJobs = useCallback(async (pageNum: number) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await apiClient.get<JobsResponse>(`/jobs?page=${pageNum}&limit=20`);
-      setJobs(data.items);
-      setTotalPages(data.totalPages);
-      setTotal(data.total);
-      setPage(data.page);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load jobs');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  /* ---- data fetching: server-side filter + paginate (spans all jobs) ---- */
+  const fetchJobs = useCallback(
+    async (pageNum: number) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams({ page: String(pageNum), limit: '20' });
+        if (statusFilter !== 'all') params.set('status', statusFilter);
+        if (sourceFilter !== 'all') params.set('source', sourceFilter);
+        if (countryFilter !== 'all') params.set('location', countryFilter);
+        const data = await apiClient.get<JobsResponse>(`/jobs?${params.toString()}`);
+        setJobs(data.items);
+        setTotalPages(data.totalPages);
+        setTotal(data.total);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load jobs');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [statusFilter, sourceFilter, countryFilter],
+  );
 
   useEffect(() => {
     fetchJobs(page);
   }, [fetchJobs, page]);
+
+  // Reset to page 1 when a filter changes
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, sourceFilter, countryFilter]);
+
+  // Filter options reflect ALL jobs, fetched once
+  useEffect(() => {
+    apiClient
+      .get<{ sources: string[]; countries: string[] }>('/jobs/facets')
+      .then(setFacets)
+      .catch(() => {});
+  }, []);
 
   /* ---- actions ---- */
   const handleRunSearch = async () => {
@@ -317,45 +343,48 @@ export function JobQueue() {
   /* ---------------------------------------------------------------- */
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6 md:p-8">
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       {/* ---------- Header ---------- */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Job Queue</h1>
-          {!loading && (
-            <p className="mt-1 text-sm text-muted-foreground">
-              {total} job{total !== 1 ? 's' : ''} in queue
-            </p>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button onClick={handleRunSearch} disabled={runningSearch}>
-            {runningSearch ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Search className="h-4 w-4" />
-            )}
-            {runningSearch ? 'Running...' : 'Run Search'}
-          </Button>
-          <Button
-            variant={showUrlInput ? 'secondary' : 'outline'}
-            onClick={() => {
-              setShowUrlInput(!showUrlInput);
-              setUrlValue('');
-            }}
-          >
-            {showUrlInput ? (
-              'Cancel'
-            ) : (
-              <>
-                <Plus className="h-4 w-4" />
-                Add URL
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Job Queue"
+        description={
+          loading
+            ? 'Discover and queue roles worth applying to.'
+            : `${total.toLocaleString()} job${total !== 1 ? 's' : ''} in queue`
+        }
+        actions={
+          <>
+            <Button
+              onClick={handleRunSearch}
+              disabled={runningSearch}
+              className="gradient-primary shadow-md shadow-primary/25"
+            >
+              {runningSearch ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Search className="h-4 w-4" />
+              )}
+              {runningSearch ? 'Running...' : 'Run Search'}
+            </Button>
+            <Button
+              variant={showUrlInput ? 'secondary' : 'outline'}
+              onClick={() => {
+                setShowUrlInput(!showUrlInput);
+                setUrlValue('');
+              }}
+            >
+              {showUrlInput ? (
+                'Cancel'
+              ) : (
+                <>
+                  <Plus className="h-4 w-4" />
+                  Add URL
+                </>
+              )}
+            </Button>
+          </>
+        }
+      />
 
       {/* ---------- Add-URL expandable card ---------- */}
       <div
@@ -365,10 +394,12 @@ export function JobQueue() {
         )}
       >
         <div className="overflow-hidden">
-          <Card>
+          <Card className="border-border/60 shadow-soft">
             <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <LinkIcon className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="flex items-center gap-2.5 text-base">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                  <LinkIcon className="h-4 w-4" />
+                </span>
                 Add job by URL
               </CardTitle>
             </CardHeader>
@@ -411,7 +442,7 @@ export function JobQueue() {
 
       {/* ---------- Sort & Filter Controls ---------- */}
       {!loading && jobs.length > 0 && (
-        <Card>
+        <Card className="border-border/60 shadow-soft">
           <CardContent className="flex flex-wrap items-center gap-3 p-3">
             <div className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
               <SlidersHorizontal className="h-4 w-4" />
@@ -460,12 +491,30 @@ export function JobQueue() {
               </SelectContent>
             </Select>
 
+            {/* Country filter */}
+            {countryOptions.length > 0 && (
+              <Select value={countryFilter} onValueChange={setCountryFilter}>
+                <SelectTrigger className="h-8 w-[150px] text-xs">
+                  <SelectValue placeholder="Country" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Countries</SelectItem>
+                  {countryOptions.map((country) => (
+                    <SelectItem key={country} value={country}>
+                      {country}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
             {/* Active filter count */}
-            {(statusFilter !== 'all' || sourceFilter !== 'all') && (
+            {(statusFilter !== 'all' || sourceFilter !== 'all' || countryFilter !== 'all') && (
               <button
                 onClick={() => {
                   setStatusFilter('all');
                   setSourceFilter('all');
+                  setCountryFilter('all');
                 }}
                 className="ml-auto text-xs text-muted-foreground underline hover:text-foreground transition-colors"
               >
@@ -478,7 +527,7 @@ export function JobQueue() {
 
       {/* ---------- Error banner ---------- */}
       {error && (
-        <Card className="border-destructive/50 bg-destructive/5">
+        <Card className="border-destructive/50 bg-destructive/5 shadow-soft">
           <CardContent className="flex items-center justify-between p-4">
             <p className="text-sm text-destructive">{error}</p>
             <Button variant="ghost" size="sm" onClick={() => setError(null)}>
@@ -490,16 +539,17 @@ export function JobQueue() {
 
       {/* ---------- Loading state ---------- */}
       {loading && (
-        <div className="flex flex-col items-center justify-center py-24">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="mt-3 text-sm text-muted-foreground">Loading jobs...</p>
+        <div className="space-y-3" aria-busy="true" aria-label="Loading jobs">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-24 animate-pulse rounded-xl bg-muted/50" />
+          ))}
         </div>
       )}
 
       {/* ---------- Empty state ---------- */}
       {!loading && jobs.length === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed py-24">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+        <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/60 py-24">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
             <Briefcase className="h-7 w-7 text-muted-foreground" />
           </div>
           <h3 className="mt-5 text-base font-semibold">No jobs found</h3>
@@ -527,9 +577,11 @@ export function JobQueue() {
       )}
 
       {/* ---------- Filtered empty state ---------- */}
-      {!loading && jobs.length > 0 && filteredJobs.length === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed py-16">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+      {!loading &&
+        jobs.length === 0 &&
+        (statusFilter !== 'all' || sourceFilter !== 'all' || countryFilter !== 'all') && (
+        <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/60 py-16">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
             <SlidersHorizontal className="h-5 w-5 text-muted-foreground" />
           </div>
           <h3 className="mt-4 text-base font-semibold">No matching jobs</h3>
@@ -549,9 +601,9 @@ export function JobQueue() {
       )}
 
       {/* ---------- Job list ---------- */}
-      {!loading && filteredJobs.length > 0 && (
+      {!loading && pagedJobs.length > 0 && (
         <div className="space-y-3">
-          {filteredJobs.map((job) => {
+          {pagedJobs.map((job) => {
             const isExpanded = expandedIds.has(job.id);
             const salary = formatSalary(job.salaryMin, job.salaryMax);
             const hasDetails = salary || job.description || job.requiredSkills?.length || job.sourceUrl;
@@ -560,7 +612,7 @@ export function JobQueue() {
               <Card
                 key={job.id}
                 className={cn(
-                  'transition-all duration-200 hover:shadow-md',
+                  'border-border/60 shadow-soft card-hover',
                   deletingIds.has(job.id) && 'opacity-50 pointer-events-none',
                 )}
               >
@@ -601,26 +653,54 @@ export function JobQueue() {
                       <Badge variant="outline" className="shrink-0 capitalize">
                         {job.sourceChannel}
                       </Badge>
-                      <Badge variant={STATUS_VARIANT[job.validationStatus]} className="shrink-0">
+                      <Badge variant={STATUS_VARIANT[job.validationStatus]} className="shrink-0 gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
                         {STATUS_LABEL[job.validationStatus]}
                       </Badge>
-                      <span className="shrink-0 text-xs text-muted-foreground">
+                      {job.applicationStatus && (
+                        <Badge
+                          variant={APPLIED_CONFIG[job.applicationStatus]?.variant ?? 'secondary'}
+                          className="shrink-0 gap-1.5"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          {APPLIED_CONFIG[job.applicationStatus]?.label ?? job.applicationStatus}
+                        </Badge>
+                      )}
+                      <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
                         {formatDate(job.createdAt)}
                       </span>
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="h-8 shrink-0 bg-emerald-600 text-white hover:bg-emerald-700"
-                        onClick={() => handleApply(job.id)}
-                        disabled={applyingIds.has(job.id)}
-                      >
-                        {applyingIds.has(job.id) ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Send className="h-4 w-4" />
-                        )}
-                        {applyingIds.has(job.id) ? 'Applying...' : 'Apply'}
-                      </Button>
+                      {job.applicationStatus ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 shrink-0"
+                          onClick={() => handleApply(job.id)}
+                          disabled={applyingIds.has(job.id)}
+                          title="Re-apply / re-queue this job"
+                        >
+                          {applyingIds.has(job.id) ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="h-4 w-4" />
+                          )}
+                          Re-apply
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="h-8 shrink-0 bg-emerald-600 text-white hover:bg-emerald-700"
+                          onClick={() => handleApply(job.id)}
+                          disabled={applyingIds.has(job.id)}
+                        >
+                          {applyingIds.has(job.id) ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="h-4 w-4" />
+                          )}
+                          {applyingIds.has(job.id) ? 'Applying...' : 'Apply'}
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -646,26 +726,26 @@ export function JobQueue() {
                   >
                     <div className="overflow-hidden">
                       {hasDetails && (
-                        <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+                        <div className="space-y-3 rounded-xl border border-border/60 bg-muted/30 p-4">
                           {/* Salary range */}
                           {salary && (
                             <div>
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Salary Range
                               </p>
-                              <p className="mt-0.5 text-sm font-semibold text-emerald-600">
+                              <p className="mt-0.5 text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
                                 {salary}
                               </p>
                             </div>
                           )}
 
-                          {/* Description preview */}
+                          {/* Full description */}
                           {job.description && (
                             <div>
                               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 Description
                               </p>
-                              <p className="mt-0.5 text-sm text-muted-foreground line-clamp-3">
+                              <p className="mt-0.5 max-h-96 overflow-y-auto whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
                                 {job.description}
                               </p>
                             </div>
@@ -724,7 +804,7 @@ export function JobQueue() {
       )}
 
       {/* ---------- Pagination ---------- */}
-      {!loading && totalPages > 1 && (
+      {!loading && clientTotalPages > 1 && (
         <div className="flex items-center justify-center gap-4 pt-2">
           <Button
             variant="outline"
@@ -735,17 +815,17 @@ export function JobQueue() {
             <ChevronLeft className="h-4 w-4" />
             Previous
           </Button>
-          <span className="text-sm text-muted-foreground">
+          <span className="text-sm text-muted-foreground tabular-nums">
             Page{' '}
             <span className="font-medium text-foreground">{page}</span>
             {' '}of{' '}
-            <span className="font-medium text-foreground">{totalPages}</span>
+            <span className="font-medium text-foreground">{clientTotalPages}</span>
           </span>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(clientTotalPages, p + 1))}
+            disabled={page >= clientTotalPages}
           >
             Next
             <ChevronRight className="h-4 w-4" />

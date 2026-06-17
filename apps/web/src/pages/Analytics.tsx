@@ -10,6 +10,7 @@ import {
 import { Badge } from '../components/ui/badge';
 import { Progress } from '../components/ui/progress';
 import { Separator } from '../components/ui/separator';
+import { PageHeader } from '../components/PageHeader';
 import { apiClient } from '../api/client';
 import {
   Briefcase,
@@ -173,10 +174,11 @@ function ErrorBanner({ message }: { message: string }) {
 function EmptyState({ message }: { message: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="rounded-full bg-muted p-3 mb-3">
+      <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-muted">
         <Activity className="h-5 w-5 text-muted-foreground" />
       </div>
-      <p className="text-sm text-muted-foreground">{message}</p>
+      <p className="text-sm font-medium text-foreground">Nothing here yet</p>
+      <p className="mt-1 text-xs text-muted-foreground">{message}</p>
     </div>
   );
 }
@@ -195,15 +197,15 @@ interface StatCardProps {
 
 function StatCard({ label, value, icon: Icon, iconBg, iconColor }: StatCardProps) {
   return (
-    <Card className="relative overflow-hidden transition-all hover:shadow-md">
+    <Card className="relative overflow-hidden border-border/60 shadow-soft card-hover">
       <CardContent className="p-5">
         <div className="flex items-center gap-4">
-          <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-full', iconBg)}>
+          <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', iconBg)}>
             <Icon className={cn('h-5 w-5', iconColor)} />
           </div>
           <div className="min-w-0">
-            <p className="text-2xl font-bold tracking-tight">{value}</p>
-            <p className="text-xs font-medium text-muted-foreground">{label}</p>
+            <p className="text-3xl font-bold tracking-tight tabular-nums">{value}</p>
+            <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
           </div>
         </div>
       </CardContent>
@@ -242,43 +244,43 @@ function OverviewSection() {
       label: 'Total Jobs',
       value: data.totalJobs.toLocaleString(),
       icon: Briefcase,
-      iconBg: 'bg-blue-100',
-      iconColor: 'text-blue-600',
+      iconBg: 'bg-blue-500/10',
+      iconColor: 'text-blue-600 dark:text-blue-400',
     },
     {
       label: 'Applications',
       value: data.totalApplications.toLocaleString(),
       icon: Send,
-      iconBg: 'bg-green-100',
-      iconColor: 'text-green-600',
+      iconBg: 'bg-green-500/10',
+      iconColor: 'text-green-600 dark:text-green-400',
     },
     {
       label: 'Pending',
       value: data.pendingApplications.toLocaleString(),
       icon: Target,
-      iconBg: 'bg-purple-100',
-      iconColor: 'text-purple-600',
+      iconBg: 'bg-purple-500/10',
+      iconColor: 'text-purple-600 dark:text-purple-400',
     },
     {
       label: 'Interviews',
       value: data.interviews.toLocaleString(),
       icon: UserCheck,
-      iconBg: 'bg-amber-100',
-      iconColor: 'text-amber-600',
+      iconBg: 'bg-amber-500/10',
+      iconColor: 'text-amber-600 dark:text-amber-400',
     },
     {
       label: 'Offers',
       value: data.offers.toLocaleString(),
       icon: Trophy,
-      iconBg: 'bg-emerald-100',
-      iconColor: 'text-emerald-600',
+      iconBg: 'bg-emerald-500/10',
+      iconColor: 'text-emerald-600 dark:text-emerald-400',
     },
     {
       label: 'Success Rate',
       value: `${successRate}%`,
       icon: TrendingUp,
-      iconBg: 'bg-rose-100',
-      iconColor: 'text-rose-600',
+      iconBg: 'bg-rose-500/10',
+      iconColor: 'text-rose-600 dark:text-rose-400',
     },
   ];
 
@@ -309,7 +311,7 @@ function ApplicationVolumeSection() {
   }, []);
 
   return (
-    <Card>
+    <Card className="border-border/60 shadow-soft">
       <CardHeader>
         <CardTitle>Application Volume</CardTitle>
         <CardDescription>Daily application count over the last 30 days</CardDescription>
@@ -328,7 +330,7 @@ function ApplicationVolumeSection() {
                   <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
               <XAxis
                 dataKey="date"
                 tickFormatter={formatShortDate}
@@ -345,8 +347,10 @@ function ApplicationVolumeSection() {
                 contentStyle={{
                   backgroundColor: 'hsl(var(--popover))',
                   border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
+                  borderRadius: '10px',
                   fontSize: '12px',
+                  color: 'hsl(var(--popover-foreground))',
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
                 }}
               />
               <Area
@@ -380,50 +384,50 @@ const FUNNEL_STAGES: {
   {
     key: 'queued',
     label: 'Queued',
-    color: 'text-blue-600',
+    color: 'text-blue-600 dark:text-blue-400',
     progressClass: '[&>div]:bg-blue-500',
   },
   {
     key: 'in_progress',
     label: 'In Progress',
-    color: 'text-indigo-600',
+    color: 'text-indigo-600 dark:text-indigo-400',
     progressClass: '[&>div]:bg-indigo-500',
   },
   {
     key: 'submitted',
     label: 'Submitted',
-    color: 'text-violet-600',
+    color: 'text-violet-600 dark:text-violet-400',
     progressClass: '[&>div]:bg-violet-500',
   },
   {
     key: 'confirmed',
     label: 'Confirmed',
-    color: 'text-cyan-600',
+    color: 'text-cyan-600 dark:text-cyan-400',
     progressClass: '[&>div]:bg-cyan-500',
   },
   {
     key: 'interview',
     label: 'Interview',
-    color: 'text-amber-600',
+    color: 'text-amber-600 dark:text-amber-400',
     progressClass: '[&>div]:bg-amber-500',
   },
   {
     key: 'offer',
     label: 'Offer',
-    color: 'text-emerald-600',
+    color: 'text-emerald-600 dark:text-emerald-400',
     progressClass: '[&>div]:bg-emerald-500',
   },
   {
     key: 'rejected',
     label: 'Rejected',
-    color: 'text-red-600',
+    color: 'text-red-600 dark:text-red-400',
     progressClass: '[&>div]:bg-red-500',
   },
   {
     key: 'failed',
     label: 'Failed',
-    color: 'text-gray-600',
-    progressClass: '[&>div]:bg-gray-500',
+    color: 'text-muted-foreground',
+    progressClass: '[&>div]:bg-slate-400 dark:[&>div]:bg-slate-500',
   },
 ];
 
@@ -442,7 +446,7 @@ function FunnelSection() {
 
   if (loading) {
     return (
-      <Card>
+      <Card className="border-border/60 shadow-soft">
         <CardHeader>
           <CardTitle>Application Funnel</CardTitle>
           <CardDescription>Track candidates through each stage</CardDescription>
@@ -456,7 +460,7 @@ function FunnelSection() {
 
   if (error) {
     return (
-      <Card>
+      <Card className="border-border/60 shadow-soft">
         <CardHeader>
           <CardTitle>Application Funnel</CardTitle>
         </CardHeader>
@@ -469,7 +473,7 @@ function FunnelSection() {
 
   if (!data) {
     return (
-      <Card>
+      <Card className="border-border/60 shadow-soft">
         <CardHeader>
           <CardTitle>Application Funnel</CardTitle>
         </CardHeader>
@@ -486,7 +490,7 @@ function FunnelSection() {
   );
 
   return (
-    <Card>
+    <Card className="border-border/60 shadow-soft">
       <CardHeader>
         <CardTitle>Application Funnel</CardTitle>
         <CardDescription>Track candidates through each stage</CardDescription>
@@ -536,7 +540,7 @@ function ResponseRateSection() {
   }, []);
 
   return (
-    <Card>
+    <Card className="border-border/60 shadow-soft">
       <CardHeader>
         <CardTitle>Response Rate</CardTitle>
         <CardDescription>Response rate percentage over the last 30 days</CardDescription>
@@ -549,7 +553,7 @@ function ResponseRateSection() {
         ) : data && data.length > 0 ? (
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
               <XAxis
                 dataKey="date"
                 tickFormatter={formatShortDate}
@@ -568,8 +572,10 @@ function ResponseRateSection() {
                 contentStyle={{
                   backgroundColor: 'hsl(var(--popover))',
                   border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
+                  borderRadius: '10px',
                   fontSize: '12px',
+                  color: 'hsl(var(--popover-foreground))',
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
                 }}
               />
               <Line
@@ -613,25 +619,37 @@ function SpendSection() {
   if (!data) return <EmptyState message="No spend data available." />;
 
   const cards = [
-    { label: 'Today', cents: data.dailySpendCents, accent: 'text-blue-600' },
-    { label: 'This Month', cents: data.monthlySpendCents, accent: 'text-violet-600' },
-    { label: 'Total', cents: data.totalSpendCents, accent: 'text-emerald-600' },
+    {
+      label: 'Today',
+      cents: data.dailySpendCents,
+      chip: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+    },
+    {
+      label: 'This Month',
+      cents: data.monthlySpendCents,
+      chip: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+    },
+    {
+      label: 'Total',
+      cents: data.totalSpendCents,
+      chip: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+    },
   ];
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       {cards.map((c) => (
-        <Card key={c.label} className="transition-all hover:shadow-md">
+        <Card key={c.label} className="border-border/60 shadow-soft card-hover">
           <CardContent className="p-5">
             <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
-                <DollarSign className="h-5 w-5 text-muted-foreground" />
+              <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', c.chip)}>
+                <DollarSign className="h-5 w-5" />
               </div>
               <div>
-                <p className={cn('text-2xl font-bold tracking-tight', c.accent)}>
+                <p className="text-3xl font-bold tracking-tight tabular-nums">
                   ${centsToDollars(c.cents)}
                 </p>
-                <p className="text-xs font-medium text-muted-foreground">{c.label}</p>
+                <p className="text-[13px] font-medium text-muted-foreground">{c.label}</p>
               </div>
             </div>
           </CardContent>
@@ -659,7 +677,7 @@ function SourceEffectivenessSection() {
   }, []);
 
   return (
-    <Card>
+    <Card className="border-border/60 shadow-soft">
       <CardHeader>
         <CardTitle>Source Effectiveness</CardTitle>
         <CardDescription>Applications, interviews, and offers by source</CardDescription>
@@ -672,7 +690,7 @@ function SourceEffectivenessSection() {
         ) : data && data.length > 0 ? (
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
               <XAxis
                 dataKey="source"
                 className="text-xs"
@@ -687,8 +705,10 @@ function SourceEffectivenessSection() {
                 contentStyle={{
                   backgroundColor: 'hsl(var(--popover))',
                   border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
+                  borderRadius: '10px',
                   fontSize: '12px',
+                  color: 'hsl(var(--popover-foreground))',
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
                 }}
               />
               <Legend />
@@ -728,7 +748,7 @@ function CostTrendsSection() {
   }));
 
   return (
-    <Card>
+    <Card className="border-border/60 shadow-soft">
       <CardHeader>
         <CardTitle>Cost Trends</CardTitle>
         <CardDescription>Daily LLM cost over the last 30 days</CardDescription>
@@ -747,7 +767,7 @@ function CostTrendsSection() {
                   <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
               <XAxis
                 dataKey="date"
                 tickFormatter={formatShortDate}
@@ -765,8 +785,10 @@ function CostTrendsSection() {
                 contentStyle={{
                   backgroundColor: 'hsl(var(--popover))',
                   border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
+                  borderRadius: '10px',
                   fontSize: '12px',
+                  color: 'hsl(var(--popover-foreground))',
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
                 }}
               />
               <Area
@@ -805,7 +827,7 @@ function LlmRequestsSection() {
   }, []);
 
   return (
-    <Card>
+    <Card className="border-border/60 shadow-soft">
       <CardHeader>
         <div className="flex items-center gap-2">
           <Cpu className="h-5 w-5 text-muted-foreground" />
@@ -854,7 +876,7 @@ function LlmRequestsSection() {
                 <span className="text-right tabular-nums">
                   {req.outputTokens.toLocaleString()}
                 </span>
-                <span className="text-right tabular-nums font-medium text-emerald-600">
+                <span className="text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400">
                   ${centsToDollars(req.costCents)}
                 </span>
                 <span className="text-right text-xs text-muted-foreground whitespace-nowrap">
@@ -889,7 +911,7 @@ function AgentActivitySection() {
   }, []);
 
   return (
-    <Card>
+    <Card className="border-border/60 shadow-soft">
       <CardHeader>
         <div className="flex items-center gap-2">
           <Activity className="h-5 w-5 text-muted-foreground" />
@@ -952,14 +974,11 @@ function AgentActivitySection() {
 
 export function Analytics() {
   return (
-    <div className="space-y-8 p-6 pb-12">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
-        <p className="mt-1 text-muted-foreground">
-          Monitor your job search performance, AI agent activity, and LLM usage at a glance.
-        </p>
-      </div>
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+      <PageHeader
+        title="Analytics"
+        description="Monitor your job search performance, AI agent activity, and LLM usage at a glance."
+      />
 
       {/* Overview Stats */}
       <section className="space-y-3">
@@ -967,28 +986,20 @@ export function Analytics() {
         <OverviewSection />
       </section>
 
-      <Separator />
-
       {/* Application Volume Chart */}
       <section>
         <ApplicationVolumeSection />
       </section>
-
-      <Separator />
 
       {/* Application Funnel */}
       <section>
         <FunnelSection />
       </section>
 
-      <Separator />
-
       {/* Response Rate Chart */}
       <section>
         <ResponseRateSection />
       </section>
-
-      <Separator />
 
       {/* LLM Spend */}
       <section className="space-y-3">
@@ -996,21 +1007,15 @@ export function Analytics() {
         <SpendSection />
       </section>
 
-      <Separator />
-
       {/* Source Effectiveness Chart */}
       <section>
         <SourceEffectivenessSection />
       </section>
 
-      <Separator />
-
       {/* Cost Trends Chart */}
       <section>
         <CostTrendsSection />
       </section>
-
-      <Separator />
 
       {/* Recent LLM Requests */}
       <section>

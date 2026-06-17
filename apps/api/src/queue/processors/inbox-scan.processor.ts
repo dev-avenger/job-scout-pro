@@ -2,7 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Injectable, Inject, Optional } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import type { Database } from '@auto-job-apply/db';
-import { inboxEmails, userPreferences } from '@auto-job-apply/db';
+import { inboxEmails, userPreferences, agentWorkLogs } from '@auto-job-apply/db';
 import { eq } from 'drizzle-orm';
 import { DRIZZLE_CLIENT } from '../../core/database/database.constants.js';
 import { EVENT_BUS } from '../../core/event-bus/event-bus.constants.js';
@@ -38,6 +38,17 @@ export class InboxScanProcessor extends WorkerHost {
       return;
     }
 
+    await this.eventBus.emit({
+      id: randomUUID(),
+      timestamp: new Date(),
+      userId,
+      type: 'inbox.scan.started',
+      data: {},
+    });
+
+    let fetchedCount = 0;
+    let hadImapConfig = false;
+
     // --- IMAP fetch + parse + insert ---
     if (this.imapClient && this.emailParser) {
       try {
@@ -50,6 +61,7 @@ export class InboxScanProcessor extends WorkerHost {
         const imapConfig: ImapConfig | null = channels?.emailImapConfig || null;
 
         if (imapConfig) {
+          hadImapConfig = true;
           // Determine sinceDate: look for the most recent email in the DB for this user
           const lastEmail = await (this.db
             .select({ createdAt: inboxEmails.createdAt })
@@ -65,6 +77,7 @@ export class InboxScanProcessor extends WorkerHost {
           logger.info({ userId, since: sinceDate.toISOString() }, 'Fetching emails via IMAP');
 
           const fetchedEmails = await this.imapClient.fetchNewEmails(imapConfig, sinceDate);
+          fetchedCount = fetchedEmails.length;
 
           for (const fetched of fetchedEmails) {
             try {
@@ -154,5 +167,56 @@ export class InboxScanProcessor extends WorkerHost {
     }
 
     logger.info({ processed: unclassified.length }, 'Inbox scan complete');
+
+    if (!hadImapConfig && unclassified.length === 0) {
+      await this.eventBus.emit({
+        id: randomUUID(),
+        timestamp: new Date(),
+        userId,
+        type: 'inbox.scan.skipped',
+        data: { reason: 'No email account connected — add IMAP settings in Settings → Email.' },
+      });
+      await this.writeWorkLog(userId, 'inbox_scan_skipped', 'skipped', {
+        reason: 'No email account connected',
+      });
+      return;
+    }
+
+    await this.eventBus.emit({
+      id: randomUUID(),
+      timestamp: new Date(),
+      userId,
+      type: 'inbox.scan.completed',
+      data: { fetched: fetchedCount, classified: unclassified.length },
+    });
+    await this.writeWorkLog(userId, 'inbox_scan', 'success', {
+      fetched: fetchedCount,
+      classified: unclassified.length,
+    });
+  }
+
+  /** Record scan runs so Monitoring → Agent Logs shows inbox activity. */
+  private async writeWorkLog(
+    userId: string,
+    action: string,
+    outcome: string,
+    output: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.db.insert(agentWorkLogs).values({
+        id: randomUUID(),
+        userId,
+        module: 'inbox',
+        action,
+        reasoning:
+          action === 'inbox_scan'
+            ? 'Fetched new emails over IMAP and classified them with the email classifier.'
+            : null,
+        outcome,
+        outputSummary: output,
+      } as any);
+    } catch (err) {
+      logger.warn({ error: err }, 'Failed to write agent work log');
+    }
   }
 }

@@ -18,7 +18,23 @@ export class ModelRouter {
   private providers: ILLMProvider[] = [];
 
   registerProvider(provider: ILLMProvider): void {
-    this.providers.push(provider);
+    // Re-registering a provider (e.g. after the user saves a new API key)
+    // replaces the old instance instead of duplicating it.
+    const idx = this.providers.findIndex((p) => p.name === provider.name);
+    if (idx >= 0) {
+      this.providers[idx] = provider;
+    } else {
+      this.providers.push(provider);
+    }
+  }
+
+  /** Move the named provider to the front so it wins tier resolution. */
+  preferProvider(name: string): void {
+    const idx = this.providers.findIndex((p) => p.name === name);
+    if (idx > 0) {
+      const [provider] = this.providers.splice(idx, 1);
+      this.providers.unshift(provider!);
+    }
   }
 
   resolveModel(taskType: TaskType, forceTier?: ModelTier): { provider: ILLMProvider; modelId: string } {
@@ -33,8 +49,9 @@ export class ModelRouter {
 
     // Fallback: use any available model
     for (const provider of this.providers) {
-      if (provider.models.length > 0) {
-        return { provider, modelId: provider.models[0].id };
+      const first = provider.models[0];
+      if (first) {
+        return { provider, modelId: first.id };
       }
     }
 

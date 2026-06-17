@@ -4,11 +4,14 @@ import type { Job } from 'bullmq';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type { Database } from '@auto-job-apply/db';
-import { jobs, jobSources, userPreferences } from '@auto-job-apply/db';
+import { jobs, userPreferences, agentWorkLogs } from '@auto-job-apply/db';
 import { eq } from 'drizzle-orm';
+import type { SearchCriteria } from '@auto-job-apply/shared-types';
 import { DRIZZLE_CLIENT } from '../../core/database/database.constants.js';
 import { EVENT_BUS } from '../../core/event-bus/event-bus.constants.js';
 import type { IEventBus } from '../../core/event-bus/interfaces/event-bus.interface.js';
+import { SEARCH_SERVICE } from '../../search/search.constants.js';
+import type { ISearchService } from '../../search/interfaces/search-service.interface.js';
 import { DeduplicationEngine } from '../../search/deduplication-engine.js';
 import { JobScorer, type JobScoreResult } from '../../search/job-scorer.js';
 import { createLogger } from '@auto-job-apply/shared-utils';
@@ -22,6 +25,7 @@ export class JobSearchProcessor extends WorkerHost {
   constructor(
     @Inject(DRIZZLE_CLIENT) private readonly db: Database,
     @Inject(EVENT_BUS) private readonly eventBus: IEventBus,
+    @Inject(SEARCH_SERVICE) private readonly searchService: ISearchService,
     private readonly deduplication: DeduplicationEngine,
     private readonly jobScorer: JobScorer,
     @InjectQueue('job-validation') private readonly validationQueue: Queue,
@@ -30,40 +34,115 @@ export class JobSearchProcessor extends WorkerHost {
   }
 
   async process(job: Job): Promise<void> {
-    const { userId, trigger } = job.data;
+    const { userId, trigger } = job.data as { userId?: string; trigger?: string };
     logger.info({ jobId: job.id, userId, trigger }, 'Processing job search');
 
-    if (!userId) {
-      logger.warn('No userId provided, skipping');
-      return;
-    }
-
-    // Load user preferences
-    const prefs = await (this.db.select().from(userPreferences).where(eq(userPreferences.userId, userId) as any).limit(1) as any);
-    const userPrefs = prefs[0] || {};
-
-    // Load active job sources for this user
-    const sources = await (this.db.select().from(jobSources).where(eq(jobSources.userId, userId) as any) as any);
-    const activeSources = (sources as any[]).filter((s: any) => s.isActive);
-
-    logger.info({ sourceCount: activeSources.length }, 'Found active sources');
-
-    let totalDiscovered = 0;
-    let totalDuplicates = 0;
-
-    // For each active source, we would call the source adapter
-    // For now, log and skip if no source adapters are configured
-    for (const source of activeSources) {
-      try {
-        logger.info({ sourceType: source.sourceType, sourceId: source.id }, 'Searching source');
-        // Source-specific search would happen here via IJobSource adapters
-        // Results would be deduplicated, scored, and inserted
-      } catch (err) {
-        logger.error({ error: err, sourceId: source.id }, 'Source search failed');
+    // Cron-triggered searches carry no userId: fan out to every user with preferences
+    let userIds: string[];
+    if (userId) {
+      userIds = [userId];
+    } else {
+      const rows = (await (this.db
+        .select({ userId: userPreferences.userId })
+        .from(userPreferences) as any)) as Array<{ userId: string }>;
+      userIds = rows.map((r) => r.userId);
+      if (userIds.length === 0) {
+        logger.info('No users with preferences found, skipping scheduled search');
+        return;
       }
     }
 
-    logger.info({ totalDiscovered, totalDuplicates, userId }, 'Job search complete');
+    for (const uid of userIds) {
+      try {
+        const discovered = await this.searchForUser(uid);
+        logger.info({ userId: uid, discovered }, 'Job search complete');
+        await this.writeWorkLog(uid, 'job_search', 'success', {
+          trigger: trigger ?? 'scheduled',
+          discovered,
+        });
+      } catch (err) {
+        logger.error({ error: err, userId: uid }, 'Job search failed for user');
+        await this.writeWorkLog(uid, 'job_search', 'failure', {
+          trigger: trigger ?? 'scheduled',
+          error: err instanceof Error ? err.message : 'Unknown error',
+        });
+      }
+    }
+  }
+
+  /** Record what the agent did so the Monitoring → Agent Logs tab has history. */
+  private async writeWorkLog(
+    userId: string,
+    action: string,
+    outcome: string,
+    output: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.db.insert(agentWorkLogs).values({
+        id: randomUUID(),
+        userId,
+        module: 'search',
+        action,
+        reasoning:
+          action === 'job_search'
+            ? 'Scanned all configured job sources against the user search criteria.'
+            : null,
+        outcome,
+        outputSummary: output,
+      } as any);
+    } catch (err) {
+      logger.warn({ error: err }, 'Failed to write agent work log');
+    }
+  }
+
+  private async searchForUser(uid: string): Promise<number> {
+    const prefRows = (await (this.db
+      .select()
+      .from(userPreferences)
+      .where(eq(userPreferences.userId, uid) as any)
+      .limit(1) as any)) as Array<Record<string, unknown>>;
+    const prefs = prefRows[0];
+
+    const keywords = (prefs?.targetRoles as string[] | null | undefined) ?? [];
+    if (keywords.length === 0) {
+      logger.info({ userId: uid }, 'No target roles configured, skipping search');
+      await this.writeWorkLog(uid, 'job_search_skipped', 'skipped', {
+        reason: 'No target roles configured',
+      });
+      // Surface the skip in the live activity feed instead of failing silently
+      await this.eventBus.emit({
+        id: randomUUID(),
+        timestamp: new Date(),
+        userId: uid,
+        type: 'search.skipped',
+        data: {
+          reason: 'No target roles configured — add them in the Setup Wizard or Settings.',
+        },
+      });
+      return 0;
+    }
+
+    // Per-user source config saved by the Settings page (Job Sources tab)
+    const uiSettings = (prefs?.uiSettings as Record<string, unknown> | null) ?? {};
+    const sourceToggles = (uiSettings.jobSources as Record<string, boolean> | undefined) ?? {};
+    const disabledSources = Object.entries(sourceToggles)
+      .filter(([, enabled]) => enabled === false)
+      .map(([name]) => name);
+
+    const criteria: SearchCriteria = {
+      keywords,
+      userId: uid,
+      locations: (prefs?.locations as string[] | null | undefined) ?? undefined,
+      salaryMin: (prefs?.salaryMin as number | null | undefined) ?? undefined,
+      excludeCompanies: (prefs?.companyBlacklist as string[] | null | undefined) ?? undefined,
+      excludeKeywords: (prefs?.keywordBlacklist as string[] | null | undefined) ?? undefined,
+      postedWithinDays: 7,
+      rssFeedUrls: (uiSettings.rssFeedUrls as string[] | undefined) ?? undefined,
+      disabledSources: disabledSources.length > 0 ? disabledSources : undefined,
+      watchlist: (uiSettings.companyWatchlist as SearchCriteria['watchlist']) ?? undefined,
+    };
+
+    return this.searchService.runSearch(uid, criteria);
   }
 
   async processDiscoveredJob(

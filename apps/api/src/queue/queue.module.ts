@@ -66,6 +66,7 @@ export class QueueModule implements OnModuleInit {
     @InjectQueue('inbox-scan') private readonly inboxScanQueue: Queue,
     @InjectQueue('maintenance') private readonly maintenanceQueue: Queue,
     @InjectQueue('job-validation') private readonly jobValidationQueue: Queue,
+    @InjectQueue('follow-up') private readonly followUpQueue: Queue,
   ) {}
 
   async onModuleInit() {
@@ -95,6 +96,15 @@ export class QueueModule implements OnModuleInit {
         every: 24 * 60 * 60 * 1000,
       }, {
         name: 'liveness-check',
+        data: { trigger: 'cron' },
+      });
+
+      // Follow-up sweep: daily at 9am. FollowUpProcessor existed but nothing ever
+      // triggered it, so submitted applications never generated follow-ups.
+      await this.followUpQueue.upsertJobScheduler('daily-follow-up', {
+        pattern: '0 9 * * *',
+      }, {
+        name: 'daily-follow-up',
         data: { trigger: 'cron' },
       });
 

@@ -23,6 +23,10 @@ export class SearchService implements ISearchService {
     private readonly jobValidator: JobValidator,
   ) {}
 
+  async getFacets(userId: string) {
+    return this.repo.getFacets(userId);
+  }
+
   async listJobs(userId: string, filters: JobFilter) {
     const { items, total } = await this.repo.findJobsByUser(userId, filters);
     return {
@@ -60,17 +64,88 @@ export class SearchService implements ISearchService {
     await this.repo.deleteJob(jobId);
   }
 
+  /**
+   * Preview search for the onboarding wizard: returns a small sample of
+   * matching jobs without persisting anything or emitting events.
+   */
+  async dryRunSearch(
+    _userId: string,
+    criteria: SearchCriteria,
+  ): Promise<Array<{ title: string; company: string; location: string; salary?: string }>> {
+    const MAX_RESULTS = 10;
+    const results: Array<{ title: string; company: string; location: string; salary?: string }> =
+      [];
+    const seen = new Set<string>();
+    const disabled = new Set(criteria.disabledSources ?? []);
+
+    for (const source of this.sources) {
+      if (results.length >= MAX_RESULTS) break;
+      if (disabled.has(source.name)) continue;
+      try {
+        for await (const rawJob of source.search(criteria)) {
+          const key = `${rawJob.title}|${rawJob.companyName}`.toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          // Same liveness/quality gate as the real search, so previews never
+          // surface closed postings
+          const validation = await this.jobValidator.validate(rawJob);
+          if (!validation.isValid) continue;
+          const salary =
+            rawJob.salaryMin || rawJob.salaryMax
+              ? [rawJob.salaryMin, rawJob.salaryMax]
+                  .filter(Boolean)
+                  .map((n) => `${rawJob.salaryCurrency ?? '$'}${Number(n).toLocaleString()}`)
+                  .join(' – ')
+              : undefined;
+
+          results.push({
+            title: rawJob.title,
+            company: rawJob.companyName,
+            location: rawJob.location ?? 'Not specified',
+            salary,
+          });
+
+          if (results.length >= MAX_RESULTS) break;
+        }
+      } catch (err) {
+        logger.error({ error: err, source: source.name }, 'Dry-run source search failed');
+      }
+    }
+
+    return results;
+  }
+
   async runSearch(userId: string, criteria: SearchCriteria): Promise<number> {
     let discoveredCount = 0;
 
-    for (const source of this.sources) {
+    const disabled = new Set(criteria.disabledSources ?? []);
+    const activeSources = this.sources.filter((s) => !disabled.has(s.name));
+
+    await this.eventBus.emit({
+      id: generateId(),
+      timestamp: new Date(),
+      userId,
+      type: 'search.started',
+      data: { keywords: criteria.keywords, sourceCount: activeSources.length },
+    });
+
+    for (const source of activeSources) {
+      let sourceDiscovered = 0;
+      await this.eventBus.emit({
+        id: generateId(),
+        timestamp: new Date(),
+        userId,
+        type: 'search.source.started',
+        data: { source: source.name },
+      });
       try {
         for await (const rawJob of source.search(criteria)) {
           const validation = await this.jobValidator.validate(rawJob);
           if (!validation.isValid) continue;
 
-          const isDuplicate = await this.deduplicationEngine.isDuplicate(userId, rawJob);
-          if (isDuplicate) continue;
+          const dupResult = await this.deduplicationEngine.isDuplicate(userId, rawJob);
+          if (dupResult.isDuplicate) continue;
 
           const jobId = generateId();
           await this.repo.insertJob({
@@ -92,6 +167,7 @@ export class SearchService implements ISearchService {
           });
 
           discoveredCount++;
+          sourceDiscovered++;
 
           await this.eventBus.emit({
             id: generateId(),
@@ -101,10 +177,32 @@ export class SearchService implements ISearchService {
             data: { jobId, source: source.name, title: rawJob.title, company: rawJob.companyName },
           });
         }
+        await this.eventBus.emit({
+          id: generateId(),
+          timestamp: new Date(),
+          userId,
+          type: 'search.source.completed',
+          data: { source: source.name, discovered: sourceDiscovered },
+        });
       } catch (err) {
         logger.error({ error: err, source: source.name }, 'Source search failed');
+        await this.eventBus.emit({
+          id: generateId(),
+          timestamp: new Date(),
+          userId,
+          type: 'search.source.failed',
+          data: { source: source.name, error: err instanceof Error ? err.message : 'Unknown error' },
+        });
       }
     }
+
+    await this.eventBus.emit({
+      id: generateId(),
+      timestamp: new Date(),
+      userId,
+      type: 'search.completed',
+      data: { discovered: discoveredCount },
+    });
 
     return discoveredCount;
   }

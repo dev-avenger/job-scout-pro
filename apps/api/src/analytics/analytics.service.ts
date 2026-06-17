@@ -36,4 +36,16 @@ export class AnalyticsService implements IAnalyticsService {
   async getAgentLogs(userId: string) {
     return this.repo.getRecentAgentLogs(userId);
   }
+
+  async getResponseRate(userId: string, days: number) {
+    return this.repo.getResponseRate(userId, days);
+  }
+
+  async getSourceEffectiveness(userId: string) {
+    return this.repo.getSourceEffectiveness(userId);
+  }
+
+  async getCostTrends(userId: string, days: number) {
+    return this.repo.getCostTrends(userId, days);
+  }
 }

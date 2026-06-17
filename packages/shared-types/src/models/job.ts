@@ -85,5 +85,24 @@ export const SearchCriteriaSchema = z.object({
   postedWithinDays: z.number().optional(),
   excludeCompanies: z.array(z.string()).optional(),
   excludeKeywords: z.array(z.string()).optional(),
+  /** Custom RSS feed URLs configured by the user (Settings → Job Sources). */
+  rssFeedUrls: z.array(z.string()).optional(),
+  /** Source names the user has switched off. */
+  disabledSources: z.array(z.string()).optional(),
+  /** Owning user — lets browser-based sources reuse the user's trusted profile. */
+  userId: z.string().optional(),
+  /** Specific companies whose career pages should be polled. */
+  watchlist: z
+    .array(
+      z.object({
+        company: z.string(),
+        adapter: z.enum(['workable', 'greenhouse', 'lever', 'html', 'successfactors']),
+        /** ATS account slug, or full careers-page URL for the html adapter. */
+        ref: z.string(),
+        city: z.string().optional(),
+        country: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 export type SearchCriteria = z.infer<typeof SearchCriteriaSchema>;

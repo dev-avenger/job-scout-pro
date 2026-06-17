@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run copy-assets",
+    "copy-assets": "node -e \"const fs=require('fs');fs.mkdirSync('dist/popup',{recursive:true});fs.copyFileSync('src/manifest.json','dist/manifest.json');fs.copyFileSync('src/popup/popup.html','dist/popup/popup.html')\"",
     "dev": "tsc --watch",
     "clean": "rm -rf dist"
   },

@@ -520,3 +520,7 @@ Specs: "Fine-tuning on your data" — style fine-tuning after 50+ apps, form-fil
 | Tests | All areas | 0 | 0 | All |
 
 **Bottom line**: The architecture, DB schema, type system, NestJS module structure, and WebSocket gateway are solid foundations. The LLM service has prompt templates and model routing ready. The primary gap is **implementation logic**: agents need real LLM calls, queue processors need business logic, the frontend needs 7+ additional screens and completion of 7 existing ones, and the email/extension subsystems are unstarted. The specs.md is ambitious (~730 lines of features), and the current codebase implements roughly 15-20% of the specified functionality.
+
+
+## Deferred — last phase
+- **SuccessFactors company hunt**: SF company IDs are arbitrary (e.g. `systemvent`) and career pages are unindexed, so bulk discovery by guessing is not viable. Approach for last phase: collect target enterprises from the user, check each careers page for `career*.sapsf.eu` redirects, and register them with the existing SuccessFactors adapter (verified working via Systems Ltd).

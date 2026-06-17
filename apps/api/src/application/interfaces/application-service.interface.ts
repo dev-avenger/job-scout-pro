@@ -3,6 +3,10 @@ import type { ApplicationStatus } from '@auto-job-apply/shared-types';
 export interface IApplicationService {
   list(userId: string, params: { page: number; limit: number; status?: string }): Promise<{ items: unknown[]; total: number; page: number; limit: number; totalPages: number }>;
   getById(userId: string, applicationId: string): Promise<unknown>;
+  getDetail(userId: string, applicationId: string): Promise<unknown>;
+  getResumeData(userId: string, applicationId: string): Promise<{ data: unknown; filename: string } | null>;
+  getAutofill(userId: string, pageUrl: string): Promise<{ applicationId: string; answers: Array<{ fieldId: string; label?: string; value: unknown; type?: string }>; resumeUrl: string; resumeFilename: string } | null>;
+  updateFormAnswers(userId: string, applicationId: string, answers: unknown): Promise<void>;
   queue(userId: string, jobId: string, autonomyMode: string): Promise<{ id: string; alreadyExists: boolean }>;
   updateStatus(userId: string, applicationId: string, newStatus: ApplicationStatus): Promise<void>;
   approve(userId: string, applicationId: string): Promise<void>;

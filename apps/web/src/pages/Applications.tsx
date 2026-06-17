@@ -1,19 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/button';
-import { Card, CardContent } from '../components/ui/card';
-import { Badge } from '../components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Checkbox } from '../components/ui/checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../components/ui/select';
 import { apiClient } from '../api/client';
+import { PageHeader } from '../components/PageHeader';
 import {
   DndContext,
   closestCorners,
@@ -36,15 +29,14 @@ import {
   XCircle,
   RotateCcw,
   Clock,
-  FileText,
   AlertTriangle,
   Loader2,
   ChevronLeft,
   ChevronRight,
   Inbox,
-  Columns3,
   Search,
-  GripVertical,
+  List,
+  LayoutGrid,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -64,6 +56,9 @@ type ApplicationStatus =
 interface Application {
   id: string;
   jobId: string;
+  jobTitle?: string | null;
+  companyName?: string | null;
+  jobLocation?: string | null;
   status: ApplicationStatus;
   autonomyMode: string;
   retryCount: number;
@@ -108,19 +103,66 @@ const ALL_STATUSES: ApplicationStatus[] = [
   'withdrawn',
 ];
 
-const STATUS_CONFIG: Record<
-  ApplicationStatus,
-  { variant: 'info' | 'warning' | 'success' | 'destructive' | 'secondary'; label: string }
-> = {
-  queued: { variant: 'info', label: 'Queued' },
-  in_progress: { variant: 'warning', label: 'In Progress' },
-  form_filling: { variant: 'warning', label: 'Form Filling' },
-  review_needed: { variant: 'warning', label: 'Review Needed' },
-  submitted: { variant: 'success', label: 'Submitted' },
-  confirmed: { variant: 'success', label: 'Confirmed' },
-  failed: { variant: 'destructive', label: 'Failed' },
-  withdrawn: { variant: 'secondary', label: 'Withdrawn' },
+interface StatusMeta {
+  label: string;
+  /** Dark-aware tinted badge classes. */
+  badge: string;
+  /** Solid dot color. */
+  dot: string;
+}
+
+const STATUS_META: Record<ApplicationStatus, StatusMeta> = {
+  queued: {
+    label: 'Queued',
+    badge: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+    dot: 'bg-sky-500',
+  },
+  in_progress: {
+    label: 'In Progress',
+    badge: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    dot: 'bg-amber-500',
+  },
+  form_filling: {
+    label: 'Form Filling',
+    badge: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+    dot: 'bg-violet-500',
+  },
+  review_needed: {
+    label: 'Review Needed',
+    badge: 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
+    dot: 'bg-orange-500',
+  },
+  submitted: {
+    label: 'Submitted',
+    badge: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+    dot: 'bg-emerald-500',
+  },
+  confirmed: {
+    label: 'Confirmed',
+    badge: 'bg-green-500/10 text-green-600 dark:text-green-400',
+    dot: 'bg-green-500',
+  },
+  failed: {
+    label: 'Failed',
+    badge: 'bg-red-500/10 text-red-600 dark:text-red-400',
+    dot: 'bg-red-500',
+  },
+  withdrawn: {
+    label: 'Withdrawn',
+    badge: 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400',
+    dot: 'bg-zinc-500',
+  },
 };
+
+const FALLBACK_META: StatusMeta = {
+  label: 'Unknown',
+  badge: 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400',
+  dot: 'bg-zinc-500',
+};
+
+function getStatusMeta(status: string): StatusMeta {
+  return STATUS_META[status as ApplicationStatus] ?? { ...FALLBACK_META, label: status };
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -138,8 +180,48 @@ function formatDate(iso: string | null): string {
   });
 }
 
+function formatShortDate(iso: string | null): string {
+  if (!iso) return '--';
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 function truncateId(id: string): string {
   return id.length > 8 ? `${id.slice(0, 8)}...` : id;
+}
+
+function avatarLetter(app: Application): string {
+  const source = app.companyName || app.jobTitle || app.jobId || app.id;
+  return (source.charAt(0) || 'A').toUpperCase();
+}
+
+function appTitle(app: Application): string {
+  return app.jobTitle || `Job ${truncateId(app.jobId)}`;
+}
+
+function appSubtitle(app: Application): string | null {
+  const parts = [app.companyName, app.jobLocation].filter(Boolean);
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+// ---------------------------------------------------------------------------
+// Status badge (dot + tinted pill)
+// ---------------------------------------------------------------------------
+
+function StatusBadge({ status, className }: { status: string; className?: string }) {
+  const meta = getStatusMeta(status);
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium',
+        meta.badge,
+        className,
+      )}
+    >
+      <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', meta.dot)} />
+      {meta.label}
+    </span>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -168,59 +250,52 @@ function SortableKanbanCard({
     opacity: isDragging ? 0.4 : 1,
   };
 
-  const config = STATUS_CONFIG[app.status] ?? { variant: 'secondary' as const, label: app.status };
-
   return (
     <div
       ref={overlay ? undefined : setNodeRef}
       style={overlay ? undefined : style}
       {...(overlay ? {} : attributes)}
+      {...(overlay ? {} : listeners)}
       className={cn(
-        'rounded-lg border bg-card p-3 shadow-sm space-y-2',
-        overlay && 'shadow-lg ring-2 ring-primary/30 rotate-2',
+        'space-y-1.5 rounded-lg border border-border/60 bg-card p-3 shadow-soft transition-shadow',
+        'cursor-grab touch-none active:cursor-grabbing hover:shadow-lifted',
+        overlay && 'rotate-2 shadow-lifted',
       )}
     >
-      <div className="flex items-center gap-2">
-        {!overlay && (
-          <button
-            className="cursor-grab touch-none text-muted-foreground hover:text-foreground"
-            {...listeners}
-          >
-            <GripVertical className="h-4 w-4" />
-          </button>
-        )}
-        <Badge variant={config.variant} className="text-xs">
-          {config.label}
-        </Badge>
-        <span className="font-mono text-xs text-muted-foreground ml-auto" title={app.id}>
-          {truncateId(app.id)}
-        </span>
+      <div className="flex items-start justify-between gap-2">
+        <p className="truncate text-sm font-medium leading-snug" title={app.jobTitle ?? app.jobId}>
+          {appTitle(app)}
+        </p>
+        <StatusBadge status={app.status} />
       </div>
 
-      {app.autonomyMode && (
-        <Badge variant="outline" className="text-xs font-normal">
-          {app.autonomyMode}
-        </Badge>
-      )}
-
-      <div className="text-xs text-muted-foreground flex items-center gap-1">
-        <Clock className="h-3 w-3" />
-        {formatDate(app.createdAt)}
-      </div>
+      <p className="truncate text-xs text-muted-foreground" title={appSubtitle(app) ?? app.id}>
+        {appSubtitle(app) ?? truncateId(app.id)}
+        {app.autonomyMode ? ` · ${app.autonomyMode}` : ''}
+      </p>
 
       {app.failureReason && (
-        <div className="text-xs text-destructive flex items-start gap-1">
-          <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+        <p
+          className="flex items-start gap-1 text-xs text-red-600 dark:text-red-400"
+          title={app.failureReason}
+        >
+          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
           <span className="truncate">{app.failureReason}</span>
-        </div>
+        </p>
       )}
 
-      {app.retryCount > 0 && (
-        <div className="text-xs text-amber-600 flex items-center gap-1">
-          <RotateCcw className="h-3 w-3" />
-          {app.retryCount} {app.retryCount === 1 ? 'retry' : 'retries'}
-        </div>
-      )}
+      <div className="flex items-center justify-between pt-0.5 text-[11px] tabular-nums text-muted-foreground">
+        <span className="inline-flex items-center gap-1">
+          <Clock className="h-3 w-3" />
+          {formatShortDate(app.createdAt)}
+        </span>
+        {app.retryCount > 0 && (
+          <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+            <RotateCcw className="h-3 w-3" />
+            {app.retryCount}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -236,29 +311,27 @@ function KanbanColumnComponent({
   status: string;
   items: Application[];
 }) {
-  const config = STATUS_CONFIG[status as ApplicationStatus] ?? {
-    variant: 'secondary' as const,
-    label: status,
-  };
+  const meta = getStatusMeta(status);
 
   const itemIds = useMemo(() => items.map((item) => item.id), [items]);
 
   return (
-    <div className="flex flex-col w-64 min-w-[16rem] shrink-0">
-      <div className="flex items-center gap-2 mb-3 px-1">
-        <Badge variant={config.variant}>{config.label}</Badge>
-        <span className="text-xs text-muted-foreground font-medium">
+    <div className="flex w-72 min-w-[17rem] shrink-0 flex-col rounded-xl border border-border/40 bg-muted/40 p-3">
+      <div className="mb-3 flex items-center gap-2 px-0.5">
+        <span className={cn('h-2 w-2 shrink-0 rounded-full', meta.dot)} />
+        <h3 className="truncate text-sm font-semibold">{meta.label}</h3>
+        <span className="ml-auto rounded-full border border-border/60 bg-card px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
           {items.length}
         </span>
       </div>
-      <div className="flex-1 bg-muted/40 rounded-lg p-2 space-y-2 min-h-[200px]">
+      <div className="min-h-[200px] flex-1 space-y-2">
         <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
           {items.map((app) => (
             <SortableKanbanCard key={app.id} app={app} />
           ))}
         </SortableContext>
         {items.length === 0 && (
-          <div className="flex items-center justify-center h-20 text-xs text-muted-foreground">
+          <div className="flex h-20 items-center justify-center rounded-lg border border-dashed border-border/60 text-xs text-muted-foreground">
             No items
           </div>
         )}
@@ -341,6 +414,15 @@ export function Applications() {
 
     return filtered;
   }, [applications, filterStatus, filterSearch, filterDateFrom, filterDateTo]);
+
+  // Per-status counts for the filter pill row (current page of data)
+  const statusCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const app of applications) {
+      counts.set(app.status, (counts.get(app.status) ?? 0) + 1);
+    }
+    return counts;
+  }, [applications]);
 
   // -------------------------------------------------------------------------
   // Data fetching
@@ -588,6 +670,13 @@ export function Applications() {
     }
   };
 
+  const selectStatusPill = (status: string) => {
+    if (activeTab !== 'all') {
+      handleTabChange('all');
+    }
+    setFilterStatus(status);
+  };
+
   // -------------------------------------------------------------------------
   // Pagination
   // -------------------------------------------------------------------------
@@ -605,137 +694,132 @@ export function Applications() {
   }
 
   // -------------------------------------------------------------------------
-  // Render: Application Card
+  // Render: List row (Linear-style table row)
   // -------------------------------------------------------------------------
 
-  function renderApplicationCard(app: Application, showCheckbox = false) {
-    const config = STATUS_CONFIG[app.status] ?? { variant: 'secondary' as const, label: app.status };
+  function renderApplicationRow(app: Application, showCheckbox = false) {
     const isApproveReject = app.status === 'queued' || app.status === 'review_needed';
     const isFailed = app.status === 'failed';
+    const isSelected = selectedIds.has(app.id);
 
     return (
-      <Card
+      <div
         key={app.id}
         className={cn(
-          'group transition-all duration-200 hover:shadow-md hover:border-primary/20',
-          isFailed && 'border-destructive/20',
-          selectedIds.has(app.id) && 'ring-2 ring-primary/40 border-primary/30',
+          'flex cursor-pointer items-center gap-4 px-4 py-3 transition-colors hover:bg-muted/50',
+          isSelected && 'bg-primary/5',
         )}
       >
-        <CardContent className="p-5">
-          <div className="flex items-start justify-between gap-4">
-            {/* Checkbox + Left section */}
-            <div className="flex items-start gap-3 flex-1 min-w-0">
-              {showCheckbox && (
-                <div className="pt-0.5">
-                  <Checkbox
-                    checked={selectedIds.has(app.id)}
-                    onCheckedChange={() => toggleSelectId(app.id)}
-                  />
-                </div>
-              )}
-              <div className="flex-1 min-w-0 space-y-3">
-                {/* Row 1: Status + ID + Autonomy mode */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={config.variant}>{config.label}</Badge>
-                  <span
-                    className="font-mono text-sm text-muted-foreground"
-                    title={app.id}
-                  >
-                    {truncateId(app.id)}
-                  </span>
-                  {app.autonomyMode && (
-                    <Badge variant="outline" className="text-xs font-normal">
-                      {app.autonomyMode}
-                    </Badge>
-                  )}
-                </div>
+        {/* Checkbox */}
+        {showCheckbox && (
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={() => toggleSelectId(app.id)}
+            aria-label="Select application"
+            className="shrink-0"
+          />
+        )}
 
-                {/* Row 2: Dates */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5" />
-                    Created {formatDate(app.createdAt)}
-                  </span>
-                  {app.submittedAt && (
-                    <span className="inline-flex items-center gap-1.5">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                      Submitted {formatDate(app.submittedAt)}
-                    </span>
-                  )}
-                </div>
+        {/* Avatar */}
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">
+          {avatarLetter(app)}
+        </div>
 
-                {/* Row 3: Failure reason */}
-                {app.failureReason && (
-                  <div className="flex items-start gap-1.5 text-sm text-destructive">
-                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                    <p className="truncate" title={app.failureReason}>
-                      {app.failureReason}
-                    </p>
-                  </div>
+        {/* Title + meta — opens the detail/review page */}
+        <div className="min-w-0 flex-1">
+          <Link
+            to={`/applications/${app.id}`}
+            className="truncate block text-sm font-medium hover:text-primary hover:underline underline-offset-2"
+            title={app.jobTitle ?? app.jobId}
+          >
+            {appTitle(app)}
+          </Link>
+          <p className="truncate text-xs text-muted-foreground" title={appSubtitle(app) ?? app.id}>
+            {appSubtitle(app) ?? <span className="font-mono">{truncateId(app.id)}</span>}
+            {app.autonomyMode ? ` · ${app.autonomyMode}` : ''}
+            {app.submittedAt ? ` · submitted ${formatShortDate(app.submittedAt)}` : ''}
+          </p>
+          {app.failureReason && (
+            <p
+              className="mt-0.5 flex items-center gap-1 truncate text-xs text-red-600 dark:text-red-400"
+              title={app.failureReason}
+            >
+              <AlertTriangle className="h-3 w-3 shrink-0" />
+              <span className="truncate">{app.failureReason}</span>
+            </p>
+          )}
+        </div>
+
+        {/* Right-aligned meta + actions */}
+        <div className="flex shrink-0 items-center gap-3">
+          {app.retryCount > 0 && (
+            <span className="hidden items-center gap-1 text-xs tabular-nums text-amber-600 dark:text-amber-400 sm:inline-flex">
+              <RotateCcw className="h-3 w-3" />
+              {app.retryCount}
+            </span>
+          )}
+
+          <StatusBadge status={app.status} />
+
+          <span
+            className="hidden whitespace-nowrap text-xs tabular-nums text-muted-foreground md:inline"
+            title={formatDate(app.createdAt)}
+          >
+            {formatShortDate(app.createdAt)}
+          </span>
+
+          {isApproveReject && (
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm"
+                variant="default"
+                className="h-8"
+                disabled={actionLoading === `${app.id}-approve`}
+                onClick={() => handleAction(app.id, 'approve')}
+              >
+                {actionLoading === `${app.id}-approve` ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
                 )}
-
-                {/* Row 4: Retry count */}
-                {app.retryCount > 0 && (
-                  <div className="flex items-center gap-1.5 text-sm text-amber-600">
-                    <RotateCcw className="h-3.5 w-3.5" />
-                    {app.retryCount} {app.retryCount === 1 ? 'retry' : 'retries'}
-                  </div>
+                Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                disabled={actionLoading === `${app.id}-reject`}
+                onClick={() => handleAction(app.id, 'reject')}
+              >
+                {actionLoading === `${app.id}-reject` ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <XCircle className="h-3.5 w-3.5" />
                 )}
-              </div>
+                Reject
+              </Button>
             </div>
+          )}
+          {isFailed && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-red-500/30 text-red-600 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400 dark:hover:text-red-400"
+              disabled={actionLoading === `${app.id}-retry`}
+              onClick={() => handleAction(app.id, 'retry')}
+            >
+              {actionLoading === `${app.id}-retry` ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RotateCcw className="h-3.5 w-3.5" />
+              )}
+              Retry
+            </Button>
+          )}
 
-            {/* Right section: Action buttons */}
-            <div className="flex items-center gap-2 shrink-0">
-              {isApproveReject && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="default"
-                    disabled={actionLoading === `${app.id}-approve`}
-                    onClick={() => handleAction(app.id, 'approve')}
-                  >
-                    {actionLoading === `${app.id}-approve` ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="h-4 w-4" />
-                    )}
-                    Approve
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={actionLoading === `${app.id}-reject`}
-                    onClick={() => handleAction(app.id, 'reject')}
-                  >
-                    {actionLoading === `${app.id}-reject` ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <XCircle className="h-4 w-4" />
-                    )}
-                    Reject
-                  </Button>
-                </>
-              )}
-              {isFailed && (
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  disabled={actionLoading === `${app.id}-retry`}
-                  onClick={() => handleAction(app.id, 'retry')}
-                >
-                  {actionLoading === `${app.id}-retry` ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RotateCcw className="h-4 w-4" />
-                  )}
-                  Retry
-                </Button>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
+        </div>
+      </div>
     );
   }
 
@@ -743,12 +827,20 @@ export function Applications() {
   // Render: Empty states
   // -------------------------------------------------------------------------
 
-  function renderEmptyState(icon: ReactNode, title: string, description: string) {
+  function renderEmptyState(
+    icon: ReactNode,
+    title: string,
+    description: string,
+    action?: ReactNode,
+  ) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 px-4">
-        <div className="rounded-full bg-muted p-4 mb-4">{icon}</div>
-        <h3 className="text-lg font-semibold text-foreground mb-1">{title}</h3>
-        <p className="text-sm text-muted-foreground text-center max-w-sm">{description}</p>
+      <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border px-4 py-16">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
+          {icon}
+        </div>
+        <h3 className="mb-1 text-base font-semibold text-foreground">{title}</h3>
+        <p className="max-w-sm text-center text-sm text-muted-foreground">{description}</p>
+        {action && <div className="mt-5">{action}</div>}
       </div>
     );
   }
@@ -759,9 +851,10 @@ export function Applications() {
 
   function renderLoading() {
     return (
-      <div className="flex flex-col items-center justify-center py-16">
-        <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
-        <p className="text-sm text-muted-foreground">Loading applications...</p>
+      <div className="space-y-2 pt-1" aria-busy="true" aria-label="Loading applications">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="h-16 animate-pulse rounded-xl bg-muted/50" />
+        ))}
       </div>
     );
   }
@@ -778,19 +871,14 @@ export function Applications() {
     const end = Math.min(page * PAGE_LIMIT, total);
 
     return (
-      <div className="flex items-center justify-between pt-4">
-        <p className="text-sm text-muted-foreground">
-          Showing <span className="font-medium text-foreground">{start}</span> -{' '}
-          <span className="font-medium text-foreground">{end}</span> of{' '}
-          <span className="font-medium text-foreground">{total}</span> results
-        </p>
-
+      <div className="flex flex-col items-center gap-2 pt-4">
         <div className="flex items-center gap-1">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
+            aria-label="Previous page"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -799,16 +887,20 @@ export function Applications() {
             p === '...' ? (
               <span
                 key={`ellipsis-${idx}`}
-                className="px-2 text-sm text-muted-foreground select-none"
+                className="select-none px-2 text-sm text-muted-foreground"
               >
                 ...
               </span>
             ) : (
               <Button
                 key={p}
-                variant={p === page ? 'default' : 'outline'}
+                variant="ghost"
                 size="sm"
-                className="min-w-[36px]"
+                className={cn(
+                  'min-w-[36px] tabular-nums',
+                  p === page &&
+                    'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground',
+                )}
                 onClick={() => setPage(p)}
               >
                 {p}
@@ -817,85 +909,146 @@ export function Applications() {
           )}
 
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             disabled={page >= totalPages}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            aria-label="Next page"
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
+        <p className="text-xs tabular-nums text-muted-foreground">
+          Showing {start}-{end} of {total}
+        </p>
       </div>
     );
   }
 
   // -------------------------------------------------------------------------
-  // Render: Filter Bar (All tab)
+  // Render: Status filter pill row
   // -------------------------------------------------------------------------
 
-  function renderFilterBar() {
+  function renderStatusPills() {
+    const pillBase =
+      'shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors';
+    const pillActive = 'bg-primary text-primary-foreground shadow-sm';
+    const pillInactive = 'bg-muted/60 text-muted-foreground hover:bg-muted';
+
     return (
-      <div className="flex flex-wrap items-end gap-3 pb-4 border-b mb-4">
-        {/* Status filter */}
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">Status</label>
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="w-[160px] h-9">
-              <SelectValue placeholder="All statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">All statuses</SelectItem>
-              {ALL_STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {STATUS_CONFIG[s].label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 -mb-1">
+        <button
+          type="button"
+          className={cn(
+            pillBase,
+            activeTab === 'all' && filterStatus === '__all__' ? pillActive : pillInactive,
+          )}
+          onClick={() => selectStatusPill('__all__')}
+        >
+          All{' '}
+          <span
+            className={cn(
+              'tabular-nums',
+              activeTab === 'all' && filterStatus === '__all__'
+                ? 'text-primary-foreground/70'
+                : 'text-muted-foreground',
+            )}
+          >
+            {total}
+          </span>
+        </button>
+
+        {ALL_STATUSES.map((s) => {
+          const isActive = activeTab === 'all' && filterStatus === s;
+          return (
+            <button
+              key={s}
+              type="button"
+              className={cn(pillBase, isActive ? pillActive : pillInactive)}
+              onClick={() => selectStatusPill(s)}
+            >
+              {STATUS_META[s].label}{' '}
+              <span
+                className={cn(
+                  'tabular-nums',
+                  isActive ? 'text-primary-foreground/70' : 'text-muted-foreground',
+                )}
+              >
+                {statusCounts.get(s) ?? 0}
+              </span>
+            </button>
+          );
+        })}
+
+        <span className="mx-1 h-5 w-px shrink-0 bg-border" aria-hidden="true" />
+
+        <button
+          type="button"
+          className={cn(pillBase, activeTab === 'review' ? pillActive : pillInactive)}
+          onClick={() => handleTabChange('review')}
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5" />
+            Review queue
+          </span>
+        </button>
+        <button
+          type="button"
+          className={cn(pillBase, activeTab === 'failed' ? pillActive : pillInactive)}
+          onClick={() => handleTabChange('failed')}
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            Dead letter
+          </span>
+        </button>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Render: Search + date filter toolbar (All tab)
+  // -------------------------------------------------------------------------
+
+  function renderFilterToolbar() {
+    const hasFilters =
+      filterStatus !== '__all__' || filterSearch || filterDateFrom || filterDateTo;
+
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Filter by ID..."
+            value={filterSearch}
+            onChange={(e) => setFilterSearch(e.target.value)}
+            className="h-9 w-[200px] pl-8"
+          />
         </div>
 
-        {/* Search by ID */}
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">Search ID</label>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Filter by ID..."
-              value={filterSearch}
-              onChange={(e) => setFilterSearch(e.target.value)}
-              className="pl-8 h-9 w-[180px]"
-            />
-          </div>
-        </div>
-
-        {/* Date from */}
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">From</label>
+        <div className="flex items-center gap-1.5">
           <Input
             type="date"
+            aria-label="From date"
             value={filterDateFrom}
             onChange={(e) => setFilterDateFrom(e.target.value)}
-            className="h-9 w-[150px]"
+            className="h-9 w-[148px]"
           />
-        </div>
-
-        {/* Date to */}
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">To</label>
+          <span className="text-xs text-muted-foreground">to</span>
           <Input
             type="date"
+            aria-label="To date"
             value={filterDateTo}
             onChange={(e) => setFilterDateTo(e.target.value)}
-            className="h-9 w-[150px]"
+            className="h-9 w-[148px]"
           />
         </div>
 
-        {/* Clear filters */}
-        {(filterStatus !== '__all__' || filterSearch || filterDateFrom || filterDateTo) && (
+        {hasFilters && (
           <Button
             variant="ghost"
             size="sm"
-            className="h-9"
+            className="h-9 text-muted-foreground"
             onClick={() => {
               setFilterStatus('__all__');
               setFilterSearch('');
@@ -903,7 +1056,7 @@ export function Applications() {
               setFilterDateTo('');
             }}
           >
-            <XCircle className="h-3.5 w-3.5 mr-1" />
+            <XCircle className="mr-1 h-3.5 w-3.5" />
             Clear
           </Button>
         )}
@@ -917,61 +1070,69 @@ export function Applications() {
 
   function renderBulkActionBar() {
     return (
-      <div className="flex items-center gap-3 pb-3">
-        <div className="flex items-center gap-2">
+      <div
+        className={cn(
+          'flex flex-wrap items-center gap-3 rounded-lg px-3 py-2 transition-colors',
+          selectedIds.size > 0
+            ? 'border border-primary/20 bg-primary/5'
+            : 'border border-transparent',
+        )}
+      >
+        <div className="flex items-center gap-2.5">
           <Checkbox
             checked={allSelected}
             // @ts-expect-error -- Radix CheckedState includes 'indeterminate'
             indeterminate={someSelected}
             onCheckedChange={(checked) => handleSelectAll(!!checked)}
           />
-          <span className="text-sm text-muted-foreground">
-            {selectedIds.size > 0
-              ? `${selectedIds.size} selected`
-              : 'Select all'}
+          <span className="text-sm tabular-nums text-muted-foreground">
+            {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select all'}
           </span>
         </div>
 
         {selectedIds.size > 0 && (
-          <div className="flex items-center gap-2 ml-2">
+          <div className="ml-auto flex items-center gap-2">
             <Button
               size="sm"
               variant="default"
+              className="h-8"
               disabled={bulkLoading}
               onClick={() => handleBulkAction('approve')}
             >
               {bulkLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 className="h-3.5 w-3.5" />
               )}
-              Bulk Approve
+              Approve
             </Button>
             <Button
               size="sm"
               variant="outline"
+              className="h-8"
               disabled={bulkLoading}
               onClick={() => handleBulkAction('reject')}
             >
               {bulkLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <XCircle className="h-4 w-4" />
+                <XCircle className="h-3.5 w-3.5" />
               )}
-              Bulk Reject
+              Reject
             </Button>
             <Button
               size="sm"
               variant="destructive"
+              className="h-8"
               disabled={bulkLoading}
               onClick={() => handleBulkAction('retry')}
             >
               {bulkLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <RotateCcw className="h-4 w-4" />
+                <RotateCcw className="h-3.5 w-3.5" />
               )}
-              Bulk Retry
+              Retry
             </Button>
           </div>
         )}
@@ -980,14 +1141,14 @@ export function Applications() {
   }
 
   // -------------------------------------------------------------------------
-  // Render: Application list
+  // Render: Application list (single card with divided rows)
   // -------------------------------------------------------------------------
 
   function renderApplicationList(apps: Application[], showCheckbox = false) {
     return (
-      <div className="space-y-3">
-        {apps.map((app) => renderApplicationCard(app, showCheckbox))}
-      </div>
+      <Card className="divide-y divide-border/60 overflow-hidden rounded-xl border-border/60 shadow-soft">
+        {apps.map((app) => renderApplicationRow(app, showCheckbox))}
+      </Card>
     );
   }
 
@@ -1000,14 +1161,11 @@ export function Applications() {
 
     if (kanbanColumns.length === 0) {
       return renderEmptyState(
-        <Columns3 className="h-8 w-8 text-muted-foreground" />,
-        'No kanban data',
-        'There are no applications to display in the kanban board.',
+        <LayoutGrid className="h-6 w-6 text-muted-foreground" />,
+        'No board data',
+        'There are no applications to display on the board.',
       );
     }
-
-    // Collect all item IDs across all columns for DndContext
-    const allColumnIds = kanbanColumns.map((col) => col.status);
 
     return (
       <DndContext
@@ -1017,7 +1175,7 @@ export function Applications() {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex gap-4 overflow-x-auto pb-4 -mx-2 px-2">
+        <div className="-mx-2 flex gap-4 overflow-x-auto px-2 pb-4">
           {kanbanColumns.map((col) => (
             <SortableContext
               key={col.status}
@@ -1043,36 +1201,130 @@ export function Applications() {
   }
 
   // -------------------------------------------------------------------------
+  // Render: List view body (all / review / failed scopes)
+  // -------------------------------------------------------------------------
+
+  function renderListView() {
+    if (activeTab === 'review') {
+      return loading
+        ? renderLoading()
+        : reviewQueue.length === 0
+          ? renderEmptyState(
+              <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />,
+              'All caught up!',
+              'No applications are waiting for your review. Check back later.',
+            )
+          : renderApplicationList(reviewQueue);
+    }
+
+    if (activeTab === 'failed') {
+      return loading
+        ? renderLoading()
+        : deadLetter.length === 0
+          ? renderEmptyState(
+              <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />,
+              'No failures',
+              'No failed applications in the dead-letter queue. Everything is running smoothly.',
+            )
+          : renderApplicationList(deadLetter);
+    }
+
+    // "All" scope
+    return (
+      <div className="space-y-3">
+        {renderFilterToolbar()}
+
+        {!loading && filteredApplications.length > 0 && renderBulkActionBar()}
+
+        {loading ? (
+          renderLoading()
+        ) : filteredApplications.length === 0 ? (
+          applications.length === 0 ? (
+            renderEmptyState(
+              <Inbox className="h-6 w-6 text-muted-foreground" />,
+              'No applications yet',
+              'Start applying to jobs and your applications will be tracked here automatically.',
+              <Button variant="outline" asChild>
+                <Link to="/jobs/queue">Browse job queue</Link>
+              </Button>,
+            )
+          ) : (
+            renderEmptyState(
+              <Search className="h-6 w-6 text-muted-foreground" />,
+              'No matching applications',
+              'Try adjusting your filters to find what you are looking for.',
+            )
+          )
+        ) : (
+          <div className="space-y-4">
+            {renderApplicationList(filteredApplications, true)}
+            {renderPagination()}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------------
   // Main render
   // -------------------------------------------------------------------------
 
+  const isBoardView = activeTab === 'kanban';
+
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">Applications</h1>
-            <Badge variant="secondary" className="text-sm">
-              {total}
-            </Badge>
+    <div className="mx-auto max-w-7xl space-y-5 p-6 lg:p-8">
+      {/* Header with view toggle */}
+      <PageHeader
+        title="Applications"
+        description={`Track and manage ${total.toLocaleString()} job ${
+          total === 1 ? 'application' : 'applications'
+        } across every stage.`}
+        actions={
+          <div className="flex items-center rounded-lg bg-muted/60 p-1">
+            <button
+              type="button"
+              className={cn(
+                'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                !isBoardView
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+              onClick={() => {
+                if (isBoardView) handleTabChange('all');
+              }}
+            >
+              <List className="h-4 w-4" />
+              List
+            </button>
+            <button
+              type="button"
+              className={cn(
+                'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                isBoardView
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+              onClick={() => {
+                if (!isBoardView) handleTabChange('kanban');
+              }}
+            >
+              <LayoutGrid className="h-4 w-4" />
+              Board
+            </button>
           </div>
-          <p className="mt-1 text-muted-foreground">
-            Track and manage your job applications.
-          </p>
-        </div>
-      </div>
+        }
+      />
 
       {/* Error banner */}
       {error && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+        <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-4">
           <div className="flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
-            <p className="text-sm text-destructive flex-1">{error}</p>
+            <AlertTriangle className="h-5 w-5 shrink-0 text-destructive" />
+            <p className="flex-1 text-sm text-destructive">{error}</p>
             <Button
               variant="ghost"
               size="sm"
-              className="text-destructive hover:text-destructive/80 shrink-0"
+              className="shrink-0 text-destructive hover:text-destructive/80"
               onClick={() => setError(null)}
             >
               <XCircle className="h-4 w-4" />
@@ -1081,98 +1333,11 @@ export function Applications() {
         </div>
       )}
 
-      {/* Tabs */}
-      <Tabs
-        value={activeTab}
-        onValueChange={handleTabChange}
-        className="w-full"
-      >
-        <TabsList className="grid w-full grid-cols-4 max-w-lg">
-          <TabsTrigger value="all" className="gap-1.5">
-            <FileText className="h-4 w-4" />
-            All
-          </TabsTrigger>
-          <TabsTrigger value="review" className="gap-1.5">
-            <Clock className="h-4 w-4" />
-            Review Queue
-          </TabsTrigger>
-          <TabsTrigger value="failed" className="gap-1.5">
-            <AlertTriangle className="h-4 w-4" />
-            Failed
-          </TabsTrigger>
-          <TabsTrigger value="kanban" className="gap-1.5">
-            <Columns3 className="h-4 w-4" />
-            Kanban
-          </TabsTrigger>
-        </TabsList>
+      {/* Status filter pills (list view only) */}
+      {!isBoardView && renderStatusPills()}
 
-        {/* All tab */}
-        <TabsContent value="all">
-          {/* Filter bar */}
-          {renderFilterBar()}
-
-          {/* Bulk action bar */}
-          {!loading && filteredApplications.length > 0 && renderBulkActionBar()}
-
-          {loading ? (
-            renderLoading()
-          ) : filteredApplications.length === 0 ? (
-            applications.length === 0 ? (
-              renderEmptyState(
-                <Inbox className="h-8 w-8 text-muted-foreground" />,
-                'No applications yet',
-                'Start applying to jobs to see them here. Your applications will be tracked automatically.',
-              )
-            ) : (
-              renderEmptyState(
-                <Search className="h-8 w-8 text-muted-foreground" />,
-                'No matching applications',
-                'Try adjusting your filters to find what you are looking for.',
-              )
-            )
-          ) : (
-            <div className="space-y-4">
-              {renderApplicationList(filteredApplications, true)}
-              {renderPagination()}
-            </div>
-          )}
-        </TabsContent>
-
-        {/* Review queue tab */}
-        <TabsContent value="review">
-          {loading ? (
-            renderLoading()
-          ) : reviewQueue.length === 0 ? (
-            renderEmptyState(
-              <CheckCircle2 className="h-8 w-8 text-emerald-500" />,
-              'All caught up!',
-              'No applications are waiting for your review. Check back later.',
-            )
-          ) : (
-            renderApplicationList(reviewQueue)
-          )}
-        </TabsContent>
-
-        {/* Failed tab */}
-        <TabsContent value="failed">
-          {loading ? (
-            renderLoading()
-          ) : deadLetter.length === 0 ? (
-            renderEmptyState(
-              <CheckCircle2 className="h-8 w-8 text-emerald-500" />,
-              'No failures',
-              'No failed applications in the dead-letter queue. Everything is running smoothly.',
-            )
-          ) : (
-            renderApplicationList(deadLetter)
-          )}
-        </TabsContent>
-
-        {/* Kanban tab */}
-        <TabsContent value="kanban">
-          {renderKanbanBoard()}
-        </TabsContent>
-      </Tabs>
+      {/* Body */}
+      {isBoardView ? renderKanbanBoard() : renderListView()}
     </div>
   );
 }

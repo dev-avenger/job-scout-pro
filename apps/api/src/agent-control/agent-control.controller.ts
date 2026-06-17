@@ -16,7 +16,7 @@ export class AgentControlController {
 
   @Get('agent/queue-stats')
   async getQueueStats(@CurrentUser() user: JwtPayload) {
-    return this.agentControlService.getQueueStats?.(user.sub) ?? { queues: [] };
+    return this.agentControlService.getQueueStats?.(user.sub) ?? {};
   }
 
   @Post('agent/pause')

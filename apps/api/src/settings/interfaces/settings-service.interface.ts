@@ -6,4 +6,27 @@ export interface ISettingsService {
   updatePreferences?(userId: string, data: Record<string, unknown>): Promise<void>;
   updateEmailConfig?(userId: string, data: Record<string, unknown>): Promise<void>;
   updateApiKeys?(userId: string, data: Record<string, unknown>): Promise<void>;
+  completeOnboarding(userId: string, payload: OnboardingPayload): Promise<void>;
+  saveOnboardingProgress(userId: string, draft: Record<string, unknown>): Promise<void>;
+}
+
+export interface OnboardingPayload {
+  preferences?: {
+    targetRoles?: string[];
+    targetLocations?: string[];
+    salaryMin?: number;
+    salaryMax?: number;
+    remotePreference?: string;
+    dailyApplicationCap?: number;
+  };
+  profile?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    location?: string;
+    linkedin?: string;
+    summary?: string;
+    skills?: string[];
+  };
+  autonomyMode?: string;
 }

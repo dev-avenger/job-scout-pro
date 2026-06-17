@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:3000/api/v1';
+const API_BASE = 'http://localhost:3100/api/v1';
 
 interface AuthState {
   token: string | null;
@@ -85,6 +85,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         addRecentCapture('form', `Form: ${message.fields?.length || 0} fields`, message.url);
         sendResponse({ success: true, data });
       })
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (message.type === 'FETCH_AUTOFILL') {
+    // Get the prepared answers for the apply page the user is on.
+    apiRequest(`/applications/autofill?url=${encodeURIComponent(message.url)}`)
+      .then((data) => sendResponse({ success: true, data }))
       .catch((err) => sendResponse({ success: false, error: err.message }));
     return true;
   }

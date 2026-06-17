@@ -34,7 +34,8 @@ export class RequestLogger {
       provider: entry.provider,
       inputTokens: entry.inputTokens,
       outputTokens: entry.outputTokens,
-      costCents: Math.round(entry.costCents),
+      // Stored as double precision — keep sub-cent costs (e.g. Gemini Flash).
+      costCents: entry.costCents,
       latencyMs: entry.latencyMs,
       status: entry.status || 'success',
       errorMessage: entry.errorMessage,

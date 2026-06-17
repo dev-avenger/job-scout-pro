@@ -1,4 +1,4 @@
-import { index, integer, jsonb, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { doublePrecision, index, integer, jsonb, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 
 import { applications } from './applications.js';
 import { jobs } from './jobs.js';
@@ -14,7 +14,8 @@ export const llmRequests = pgTable('llm_requests', {
   promptVersion: varchar('prompt_version', { length: 20 }),
   inputTokens: integer('input_tokens').notNull(),
   outputTokens: integer('output_tokens').notNull(),
-  costCents: integer('cost_cents').notNull(),
+  // Sub-cent costs are common (e.g. Gemini Flash), so store fractional cents.
+  costCents: doublePrecision('cost_cents').notNull(),
   latencyMs: integer('latency_ms').notNull(),
   status: varchar('status', { length: 20 }).default('success').notNull(),
   errorMessage: text('error_message'),

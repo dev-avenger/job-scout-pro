@@ -18,6 +18,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\"",
     "typecheck": "turbo typecheck",
+    "db:push": "pnpm --filter @auto-job-apply/db push",
     "db:migrate": "pnpm --filter @auto-job-apply/db migrate",
     "db:seed": "pnpm --filter @auto-job-apply/db seed",
     "db:generate": "pnpm --filter @auto-job-apply/db generate",

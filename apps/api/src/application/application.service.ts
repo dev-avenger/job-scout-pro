@@ -7,6 +7,8 @@ import { EVENT_BUS } from '../core/event-bus/event-bus.constants.js';
 import type { IApplicationRepository } from './interfaces/application-repository.interface.js';
 import type { IApplicationService } from './interfaces/application-service.interface.js';
 import type { IEventBus } from '../core/event-bus/interfaces/event-bus.interface.js';
+import { buildResumeData } from '../resume/export/resume-data.js';
+import type { ResumeData } from '../resume/export/pdf-generator.js';
 
 const logger = createLogger({ name: 'application-service' });
 
@@ -32,6 +34,147 @@ export class ApplicationService implements IApplicationService {
     const app = await this.repo.getById(userId, applicationId);
     if (!app) throw new NotFoundException('Application not found');
     return app;
+  }
+
+  /** Assemble the rich shape the Application Detail page expects. */
+  async getDetail(userId: string, applicationId: string) {
+    const a = (await this.repo.getById(userId, applicationId)) as Record<string, any> | undefined;
+    if (!a) throw new NotFoundException('Application not found');
+    // Resume that will be attached: a job-tailored PDF generated for this
+    // application (falls back to the base profile when not tailored).
+    const profileId = await this.repo.getDefaultProfileId(userId);
+    const resumeFilename = `${String(a.companyName ?? 'Company').replace(/[^a-zA-Z0-9]+/g, '_')}_Resume.pdf`;
+    return {
+      id: a.id,
+      jobId: a.jobId,
+      status: a.status,
+      autonomyMode: a.autonomyMode,
+      retryCount: a.retryCount ?? 0,
+      failureReason: a.failureReason ?? null,
+      createdAt: a.createdAt,
+      updatedAt: a.updatedAt,
+      submittedAt: a.submittedAt ?? null,
+      job: {
+        title: a.jobTitle ?? 'Job',
+        company: a.companyName ?? '',
+        location: a.jobLocation ?? '',
+        // Original posting URL (preferred) and the apply URL. getById aliases
+        // jobs.applyUrl → jobUrl, so read that, not a.applyUrl.
+        url: a.jobSourceUrl ?? a.jobUrl ?? undefined,
+        applyUrl: a.jobUrl ?? undefined,
+      },
+      scores:
+        a.relevanceScore != null || a.atsScore != null || a.scamScore != null
+          ? { relevance: a.relevanceScore ?? 0, ats: a.atsScore ?? 0, scam: a.scamScore ?? 0 }
+          : null,
+      documents: {
+        resumeText: a.tailoredResume ?? null,
+        coverLetterText: a.coverLetter ?? null,
+        // Downloadable resume PDF — job-tailored when available. null when the
+        // user has no profile yet.
+        resumeUrl: profileId ? `/applications/${applicationId}/resume.pdf` : null,
+        resumeTailored: Boolean(a.tailoredResume),
+        resumeFilename,
+      },
+      formAnswers: a.formAnswers ?? null,
+      emails: (await this.repo.getEmailsForApplication(applicationId)).map((e: any) => ({
+        id: e.id,
+        from: e.fromAddress ?? '',
+        subject: e.subject ?? '',
+        date: e.createdAt,
+        classification: e.classification ?? 'unknown',
+      })),
+      companyBrief: await this.buildCompanyBrief(a.companyName),
+      llmRequests: await this.repo.getLlmRequestsForApplication(applicationId),
+    };
+  }
+
+  /**
+   * Find the application matching the apply page the user is on (by shared URL
+   * token, e.g. the Workable shortcode) and return its prepared answers — used
+   * by the browser extension to auto-fill the form in the user's own browser.
+   */
+  async getAutofill(userId: string, pageUrl: string): Promise<{
+    applicationId: string;
+    answers: Array<{ fieldId: string; label?: string; value: unknown; type?: string }>;
+    resumeUrl: string;
+    resumeFilename: string;
+  } | null> {
+    const tokens = (url: string): string[] => {
+      try {
+        return new URL(url).pathname.split('/').filter((s) => s.length >= 6 && /[a-z0-9]/i.test(s));
+      } catch {
+        return [];
+      }
+    };
+    const pageTokens = new Set(tokens(pageUrl));
+    if (pageTokens.size === 0) return null;
+
+    const apps = await this.repo.getApplicationsForAutofill(userId);
+    const match = apps.find(
+      (a) => a.applyUrl && tokens(a.applyUrl).some((t) => pageTokens.has(t)),
+    );
+    if (!match) return null;
+
+    const fa = (match.formAnswers as { answers?: any[] } | null) ?? {};
+    return {
+      applicationId: match.id,
+      answers: (fa.answers ?? []).map((a: any) => ({ fieldId: a.fieldId, label: a.label, value: a.value, type: a.type })),
+      resumeUrl: `/applications/${match.id}/resume.pdf`,
+      resumeFilename: 'Resume.pdf',
+    };
+  }
+
+  /** ResumeData for this application's PDF — tailored when available. */
+  async getResumeData(
+    userId: string,
+    applicationId: string,
+  ): Promise<{ data: ResumeData; filename: string } | null> {
+    const a = (await this.repo.getById(userId, applicationId)) as Record<string, any> | undefined;
+    if (!a) throw new NotFoundException('Application not found');
+    const profile = await this.repo.getDefaultProfile(userId);
+    if (!profile) return null;
+    const data = buildResumeData(profile as Record<string, any>, a.tailoredResume ?? null);
+    const filename = `${String(a.companyName ?? 'Company').replace(/[^a-zA-Z0-9]+/g, '_')}_Resume.pdf`;
+    return { data, filename };
+  }
+
+  private async buildCompanyBrief(companyName?: string) {
+    if (!companyName) return null;
+    const c = (await this.repo.getCompanyByName(companyName)) as Record<string, any> | null;
+    if (!c) return null;
+    const brief = (c.researchData as Record<string, unknown> | null)?.brief as string | undefined;
+    // Only return a brief if we actually have research or enrichment data
+    if (!brief && !c.industry && c.glassdoorRating == null) return null;
+    return {
+      description: brief ?? '',
+      size: c.sizeRange ?? '',
+      industry: c.industry ?? '',
+      glassdoorScore: c.glassdoorRating ?? null,
+      cultureScore: c.culturalFitScore ?? null,
+      growthScore: c.stabilityScore ?? null,
+    };
+  }
+
+  async getEvents(userId: string, applicationId: string) {
+    const app = await this.repo.getById(userId, applicationId);
+    if (!app) return [];
+    const events = await this.repo.getEventsForApplication(applicationId);
+    return (events as any[]).map((e) => ({
+      id: e.id,
+      type: e.eventType,
+      description:
+        e.oldValue && e.newValue
+          ? `${e.eventType.replace(/_/g, ' ')}: ${e.oldValue} → ${e.newValue}`
+          : e.eventType.replace(/_/g, ' '),
+      createdAt: e.createdAt,
+    }));
+  }
+
+  async updateFormAnswers(userId: string, applicationId: string, answers: unknown) {
+    const app = await this.repo.getById(userId, applicationId);
+    if (!app) throw new NotFoundException('Application not found');
+    await this.repo.updateFormAnswers(applicationId, answers);
   }
 
   async queue(userId: string, jobId: string, autonomyMode: string) {
@@ -106,8 +249,32 @@ export class ApplicationService implements IApplicationService {
   async approve(userId: string, applicationId: string) {
     const app = await this.repo.getById(userId, applicationId);
     if (!app) throw new NotFoundException('Application not found');
-    if (app.status !== 'queued') throw new BadRequestException('Can only approve queued applications');
-    await this.updateStatus(userId, applicationId, 'in_progress');
+
+    if (app.status === 'queued') {
+      await this.updateStatus(userId, applicationId, 'in_progress');
+      return;
+    }
+
+    if (app.status === 'pending_review') {
+      // Immutable audit record of exactly what was submitted to this job —
+      // the application row's formAnswers can be edited later, this cannot.
+      await this.repo.recordEvent({
+        id: generateId(),
+        applicationId,
+        eventType: 'submission_record',
+        oldValue: 'pending_review',
+        newValue: 'submitted',
+        metadata: {
+          submittedAt: new Date().toISOString(),
+          formAnswers: (app as Record<string, unknown>).formAnswers ?? null,
+          coverLetter: (app as Record<string, unknown>).coverLetter ?? null,
+        },
+      });
+      await this.updateStatus(userId, applicationId, 'submitted');
+      return;
+    }
+
+    throw new BadRequestException('Can only approve queued or reviewed applications');
   }
 
   async reject(userId: string, applicationId: string) {

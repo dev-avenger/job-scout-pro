@@ -12,6 +12,7 @@ import { Plus, ArrowLeft, FileText } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { Profile, TemplatesData, ContactInfo, View } from '../types/resume';
 import { ResumeBuilderSkeleton } from '../components/resume/ResumeBuilderSkeleton';
+import { ResumeImportDialog } from '../components/resume/ResumeImportDialog';
 import { ProfileForm } from '../components/resume/ProfileForm';
 import { ProfileCard } from '../components/resume/ProfileCard';
 import { ProfileDetail } from '../components/resume/ProfileDetail';
@@ -272,11 +273,20 @@ export function ResumeBuilder() {
   return (
     <div className="space-y-8 p-6 lg:p-8">
       {/* Header */}
-      <div className="animate-fade-in space-y-1">
-        <h1 className="text-3xl font-bold tracking-tight">Resume Builder</h1>
-        <p className="text-muted-foreground">
-          Manage your profiles and resume templates.
-        </p>
+      <div className="animate-fade-in flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">Resume Builder</h1>
+          <p className="text-muted-foreground">
+            Manage your profiles and resume templates. Import a resume to auto-fill your profile —
+            then edit anything manually.
+          </p>
+        </div>
+        {profiles.length > 0 && (
+          <ResumeImportDialog
+            profileId={selectedProfileId ?? profiles[0]!.id}
+            onImported={() => fetchData()}
+          />
+        )}
       </div>
 
       {/* Inline error banner */}

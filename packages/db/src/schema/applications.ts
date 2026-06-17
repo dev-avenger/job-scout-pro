@@ -1,4 +1,4 @@
-import { integer, jsonb, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { doublePrecision, integer, jsonb, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 
 import { jobs } from './jobs.js';
 import { resumeVersions } from './profiles.js';
@@ -19,8 +19,11 @@ export const applications = pgTable('applications', {
   responseType: varchar('response_type', { length: 30 }),
   daysToResponse: integer('days_to_response'),
   coverLetter: text('cover_letter'),
+  // Job-tailored resume content (summary/experience bullets/skills) produced by
+  // the resume-tailor agent; used to generate the attached PDF.
+  tailoredResume: jsonb('tailored_resume'),
   formAnswers: jsonb('form_answers'),
-  llmCostCents: integer('llm_cost_cents').default(0).notNull(),
+  llmCostCents: doublePrecision('llm_cost_cents').default(0).notNull(),
   failureReason: text('failure_reason'),
   failureType: varchar('failure_type', { length: 20 }),
   failureScreenshotUrl: varchar('failure_screenshot_url', { length: 500 }),

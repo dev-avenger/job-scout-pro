@@ -1,15 +1,103 @@
-import { Controller, Get, Put, Body, UseGuards, Inject, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Put,
+  Post,
+  Body,
+  UseGuards,
+  Inject,
+  HttpCode,
+  HttpStatus,
+  BadRequestException,
+} from '@nestjs/common';
 import { UpdateAutonomySchema, UpdateLLMSettingsSchema } from '@auto-job-apply/shared-types';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { CurrentUser, type JwtPayload } from '../common/decorators/current-user.decorator.js';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe.js';
+import { ImapClient } from '../inbox/email/imap-client.js';
+import { SmtpClient } from '../inbox/email/smtp-client.js';
+import { BrowserApplyService } from '../application/browser-apply.service.js';
 import { SETTINGS_SERVICE } from './settings.constants.js';
 import type { ISettingsService } from './interfaces/settings-service.interface.js';
+
+interface EmailTestBody {
+  host: string;
+  port: number;
+  secure: boolean;
+  username: string;
+  password: string;
+  fromAddress?: string;
+}
 
 @Controller('api/v1/settings')
 @UseGuards(JwtAuthGuard)
 export class SettingsController {
-  constructor(@Inject(SETTINGS_SERVICE) private readonly settingsService: ISettingsService) {}
+  constructor(
+    @Inject(SETTINGS_SERVICE) private readonly settingsService: ISettingsService,
+    private readonly imapClient: ImapClient,
+    private readonly smtpClient: SmtpClient,
+    private readonly browserApplyService: BrowserApplyService,
+  ) {}
+
+  @Post('credentials/test-indeed')
+  async testIndeed(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { username: string; password: string; headful?: boolean },
+  ) {
+    if (!body.username || !body.password) {
+      throw new BadRequestException('Provide both your Indeed email and password.');
+    }
+    const result = await this.browserApplyService.verifyIndeedLogin(
+      user.sub,
+      { siteName: 'indeed', username: body.username, password: body.password },
+      body.headful,
+    );
+    // Once the session is banked, future runs can go headless automatically.
+    // If login didn't complete, keep the user's chosen (likely visible) setting
+    // so the next attempt still shows the window.
+    await this.settingsService.updateApiKeys?.(user.sub, {
+      indeedHeadful: result.ok ? false : (body.headful ?? false),
+    });
+    if (!result.ok) {
+      // 200 with status so the UI can distinguish CAPTCHA from bad password
+      return { success: false, status: result.status, message: result.detail, headful: body.headful ?? false };
+    }
+    return {
+      success: true,
+      status: result.status,
+      message: `${result.detail} Visible-browser mode turned off — your session is saved.`,
+      headful: false,
+    };
+  }
+
+  @Post('email/test-imap')
+  async testImap(@Body() body: EmailTestBody) {
+    const ok = await this.imapClient.testConnection({
+      host: body.host,
+      port: body.port,
+      secure: body.secure,
+      auth: { user: body.username, pass: body.password },
+    });
+    if (!ok) {
+      throw new BadRequestException('IMAP connection failed — check host, port, and credentials');
+    }
+    return { success: true };
+  }
+
+  @Post('email/test-smtp')
+  async testSmtp(@Body() body: EmailTestBody) {
+    const ok = await this.smtpClient.testConnection({
+      host: body.host,
+      port: body.port,
+      secure: body.secure,
+      auth: { user: body.username, pass: body.password },
+      fromAddress: body.fromAddress,
+    });
+    if (!ok) {
+      throw new BadRequestException('SMTP connection failed — check host, port, and credentials');
+    }
+    return { success: true };
+  }
 
   @Get()
   async getSettings(@CurrentUser() user: JwtPayload) {
@@ -56,7 +144,7 @@ export class SettingsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async updateEmailConfig(
     @CurrentUser() user: JwtPayload,
-    @Body() body: { imapHost?: string; imapPort?: number; smtpHost?: string; smtpPort?: number; emailUser?: string; emailPass?: string },
+    @Body() body: { imap?: Record<string, unknown>; smtp?: Record<string, unknown> },
   ) {
     await this.settingsService.updateEmailConfig?.(user.sub, body);
   }

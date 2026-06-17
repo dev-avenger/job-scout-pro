@@ -19,6 +19,7 @@ const InterviewPrep = lazy(() => import('./pages/InterviewPrep').then(m => ({ de
 const SalaryCentre = lazy(() => import('./pages/SalaryCentre').then(m => ({ default: m.SalaryCentre })));
 const Networking = lazy(() => import('./pages/Networking').then(m => ({ default: m.Networking })));
 const Monitoring = lazy(() => import('./pages/Monitoring').then(m => ({ default: m.Monitoring })));
+const AiUsage = lazy(() => import('./pages/AiUsage').then(m => ({ default: m.AiUsage })));
 const Notifications = lazy(() => import('./pages/Notifications').then(m => ({ default: m.Notifications })));
 const CaptchaQueue = lazy(() => import('./pages/CaptchaQueue').then(m => ({ default: m.CaptchaQueue })));
 const ApplicationDetail = lazy(() => import('./pages/ApplicationDetail').then(m => ({ default: m.ApplicationDetail })));
@@ -59,6 +60,7 @@ export function App() {
           <Route path="/salary" element={<SalaryCentre />} />
           <Route path="/networking" element={<Networking />} />
           <Route path="/monitoring" element={<Monitoring />} />
+          <Route path="/ai-usage" element={<AiUsage />} />
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/captcha-queue" element={<CaptchaQueue />} />
           <Route path="*" element={<Navigate to="/" replace />} />

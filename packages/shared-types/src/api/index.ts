@@ -29,7 +29,7 @@ export type AuthResponse = z.infer<typeof AuthResponseSchema>;
 // Pagination
 export const PaginationParamsSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(1000).default(20),
   sortBy: z.string().optional(),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });
@@ -84,6 +84,11 @@ export const UpdateLLMSettingsSchema = z.object({
   preferredProvider: z.string().optional(),
   ollamaFallbackEnabled: z.boolean().optional(),
   ollamaBaseUrl: z.string().optional(),
+  provider: z.string().optional(),
+  model: z.string().optional(),
+  apiKey: z.string().optional(),
+  ollamaUrl: z.string().optional(),
+  temperature: z.number().min(0).max(2).optional(),
 });
 export type UpdateLLMSettings = z.infer<typeof UpdateLLMSettingsSchema>;
 

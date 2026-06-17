@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
 import {
   Card,
   CardContent,
@@ -13,6 +14,7 @@ import { Badge } from '../components/ui/badge';
 import { Separator } from '../components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { ScoreCard } from '../components/ScoreCard';
+import { PageHeader } from '../components/PageHeader';
 import { apiClient } from '../api/client';
 import {
   ArrowLeft,
@@ -33,6 +35,7 @@ import {
   Shield,
   Eye,
   Ban,
+  ExternalLink,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -44,8 +47,13 @@ type ApplicationStatus =
   | 'in_progress'
   | 'form_filling'
   | 'review_needed'
+  | 'pending_review'
+  | 'needs_captcha'
   | 'submitted'
   | 'confirmed'
+  | 'interview'
+  | 'offer'
+  | 'rejected'
   | 'failed'
   | 'withdrawn';
 
@@ -64,6 +72,7 @@ interface ApplicationData {
     company: string;
     location: string;
     url?: string;
+    applyUrl?: string;
   };
   scores: {
     relevance: number;
@@ -73,11 +82,12 @@ interface ApplicationData {
   documents: {
     resumeText: string | null;
     coverLetterText: string | null;
+    resumeUrl?: string | null;
+    resumeFilename?: string;
   } | null;
-  formAnswers: Array<{
-    fieldLabel: string;
-    answer: string;
-  }>;
+  // Shape varies by apply path (legacy array, ATS-prepared object, or browser
+  // fill) — normalized at render time.
+  formAnswers: unknown;
   emails: Array<{
     id: string;
     from: string;
@@ -117,8 +127,13 @@ const STATUS_CONFIG: Record<
   in_progress: { variant: 'warning', label: 'In Progress' },
   form_filling: { variant: 'warning', label: 'Form Filling' },
   review_needed: { variant: 'warning', label: 'Review Needed' },
+  pending_review: { variant: 'warning', label: 'Pending Review' },
+  needs_captcha: { variant: 'warning', label: 'Needs CAPTCHA' },
   submitted: { variant: 'success', label: 'Submitted' },
   confirmed: { variant: 'success', label: 'Confirmed' },
+  interview: { variant: 'success', label: 'Interview' },
+  offer: { variant: 'success', label: 'Offer' },
+  rejected: { variant: 'destructive', label: 'Rejected' },
   failed: { variant: 'destructive', label: 'Failed' },
   withdrawn: { variant: 'secondary', label: 'Withdrawn' },
 };
@@ -150,19 +165,19 @@ function getScoreBarColor(score: number, invert = false): string {
 function getEventTypeIcon(type: string) {
   switch (type) {
     case 'created':
-      return <Clock className="w-4 h-4 text-blue-500" />;
+      return <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />;
     case 'submitted':
-      return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
+      return <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />;
     case 'failed':
-      return <XCircle className="w-4 h-4 text-red-500" />;
+      return <XCircle className="w-4 h-4 text-red-600 dark:text-red-400" />;
     case 'retry':
-      return <RotateCcw className="w-4 h-4 text-amber-500" />;
+      return <RotateCcw className="w-4 h-4 text-amber-600 dark:text-amber-400" />;
     case 'withdrawn':
-      return <Ban className="w-4 h-4 text-gray-500" />;
+      return <Ban className="w-4 h-4 text-muted-foreground" />;
     case 'approved':
-      return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
+      return <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />;
     case 'rejected':
-      return <XCircle className="w-4 h-4 text-red-500" />;
+      return <XCircle className="w-4 h-4 text-red-600 dark:text-red-400" />;
     default:
       return <History className="w-4 h-4 text-muted-foreground" />;
   }
@@ -174,14 +189,14 @@ function getEventTypeIcon(type: string) {
 
 function LoadingSkeleton() {
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6" aria-busy="true">
       <div className="flex items-center gap-3">
-        <div className="h-9 w-20 bg-muted animate-pulse rounded-lg" />
-        <div className="h-6 w-48 bg-muted animate-pulse rounded" />
+        <div className="h-9 w-20 animate-pulse rounded-xl bg-muted/50" />
+        <div className="h-6 w-48 animate-pulse rounded-xl bg-muted/50" />
       </div>
-      <div className="h-24 bg-muted animate-pulse rounded-xl" />
-      <div className="h-10 w-full bg-muted animate-pulse rounded-lg" />
-      <div className="h-64 bg-muted animate-pulse rounded-xl" />
+      <div className="h-24 animate-pulse rounded-xl bg-muted/50" />
+      <div className="h-10 w-full animate-pulse rounded-xl bg-muted/50" />
+      <div className="h-64 animate-pulse rounded-xl bg-muted/50" />
     </div>
   );
 }
@@ -241,6 +256,8 @@ export function ApplicationDetail() {
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [editedAnswers, setEditedAnswers] = useState<Record<number, string> | null>(null);
+  const [savingAnswers, setSavingAnswers] = useState(false);
 
   // -------------------------------------------------------------------------
   // Data Fetching
@@ -293,7 +310,7 @@ export function ApplicationDetail() {
   // Actions
   // -------------------------------------------------------------------------
 
-  const handleAction = async (action: 'approve' | 'reject' | 'retry' | 'withdraw') => {
+  const handleAction = async (action: 'approve' | 'reject' | 'retry' | 'withdraw' | 'submit-assisted') => {
     if (!id) return;
     setActionLoading(action);
     try {
@@ -316,13 +333,15 @@ export function ApplicationDetail() {
 
   if (error && !application) {
     return (
-      <div className="p-6 max-w-5xl mx-auto">
+      <div className="p-6 lg:p-8 max-w-7xl mx-auto">
         <Button variant="ghost" onClick={() => navigate('/applications')}>
           <ArrowLeft className="w-4 h-4" />
           Back to Applications
         </Button>
-        <div className="mt-8 flex flex-col items-center justify-center py-16">
-          <AlertTriangle className="w-12 h-12 text-destructive mb-4" />
+        <div className="mt-8 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/60 py-16">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-destructive/10 text-destructive mb-4">
+            <AlertTriangle className="w-7 h-7" />
+          </div>
           <h2 className="text-xl font-semibold text-foreground mb-2">
             Failed to Load Application
           </h2>
@@ -345,6 +364,9 @@ export function ApplicationDetail() {
   const showRetry = application.status === 'failed';
   const showWithdraw =
     application.status === 'submitted' || application.status === 'confirmed';
+  // Browser-assisted submit: fill the real ATS form + attach resume in Chrome.
+  const showBrowserSubmit =
+    application.status === 'pending_review' || application.status === 'needs_captcha';
 
   // -------------------------------------------------------------------------
   // Render: Overview Tab
@@ -354,7 +376,7 @@ export function ApplicationDetail() {
     if (!application) return null;
     return (
       <div className="space-y-4">
-        <Card>
+        <Card className="border-border/60 shadow-soft">
           <CardContent className="p-5 space-y-4">
             {/* Job Info */}
             <div className="grid gap-3 sm:grid-cols-2">
@@ -394,6 +416,22 @@ export function ApplicationDetail() {
                   </Badge>
                 </div>
               </div>
+              {application.job.url && (
+                <div className="flex items-start gap-3 sm:col-span-2">
+                  <ExternalLink className="w-4 h-4 mt-1 text-muted-foreground shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground">Job Posting</p>
+                    <a
+                      href={application.job.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm font-medium text-primary hover:underline break-all"
+                    >
+                      {application.job.url}
+                    </a>
+                  </div>
+                </div>
+              )}
             </div>
 
             <Separator />
@@ -418,7 +456,7 @@ export function ApplicationDetail() {
 
             {/* Retry count */}
             {application.retryCount > 0 && (
-              <div className="flex items-center gap-2 text-sm text-amber-600">
+              <div className="flex items-center gap-2 text-sm tabular-nums text-amber-600 dark:text-amber-400">
                 <RotateCcw className="w-4 h-4" />
                 {application.retryCount}{' '}
                 {application.retryCount === 1 ? 'retry' : 'retries'}
@@ -454,7 +492,7 @@ export function ApplicationDetail() {
   function renderScores() {
     if (!application?.scores) {
       return (
-        <Card>
+        <Card className="border-border/60 shadow-soft">
           <CardContent className="p-5">
             <div className="flex flex-col items-center justify-center py-8">
               <BarChart3 className="w-8 h-8 text-muted-foreground mb-3" />
@@ -468,7 +506,7 @@ export function ApplicationDetail() {
     }
 
     return (
-      <Card>
+      <Card className="border-border/60 shadow-soft">
         <CardHeader>
           <CardTitle className="text-lg">Application Scores</CardTitle>
           <CardDescription>
@@ -504,10 +542,11 @@ export function ApplicationDetail() {
   function renderDocuments() {
     if (
       !application?.documents?.resumeText &&
-      !application?.documents?.coverLetterText
+      !application?.documents?.coverLetterText &&
+      !application?.documents?.resumeUrl
     ) {
       return (
-        <Card>
+        <Card className="border-border/60 shadow-soft">
           <CardContent className="p-5">
             <div className="flex flex-col items-center justify-center py-8">
               <FileText className="w-8 h-8 text-muted-foreground mb-3" />
@@ -522,8 +561,45 @@ export function ApplicationDetail() {
 
     return (
       <div className="space-y-4">
+        {application.documents?.resumeUrl && (
+          <Card className="border-border/60 shadow-soft">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Resume (PDF)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/30 p-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {application.documents.resumeFilename ?? 'Resume.pdf'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Generated from your profile — this is the file attached on submit.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 gap-2"
+                  onClick={() =>
+                    apiClient.downloadBlob(
+                      application.documents!.resumeUrl!,
+                      application.documents!.resumeFilename ?? 'Resume.pdf',
+                    )
+                  }
+                >
+                  <FileText className="w-4 h-4" />
+                  Download
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {application.documents?.resumeText && (
-          <Card>
+          <Card className="border-border/60 shadow-soft">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <FileText className="w-5 h-5" />
@@ -531,7 +607,7 @@ export function ApplicationDetail() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="rounded-lg border bg-muted/30 p-4 max-h-96 overflow-y-auto">
+              <div className="rounded-xl border border-border/60 bg-muted/30 p-4 max-h-96 overflow-y-auto">
                 <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed">
                   {application.documents.resumeText}
                 </pre>
@@ -541,7 +617,7 @@ export function ApplicationDetail() {
         )}
 
         {application.documents?.coverLetterText && (
-          <Card>
+          <Card className="border-border/60 shadow-soft">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <FileText className="w-5 h-5" />
@@ -549,7 +625,7 @@ export function ApplicationDetail() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="rounded-lg border bg-muted/30 p-4 max-h-96 overflow-y-auto">
+              <div className="rounded-xl border border-border/60 bg-muted/30 p-4 max-h-96 overflow-y-auto">
                 <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed">
                   {application.documents.coverLetterText}
                 </pre>
@@ -565,10 +641,44 @@ export function ApplicationDetail() {
   // Render: Form Answers Tab
   // -------------------------------------------------------------------------
 
+  // Normalize the various formAnswers shapes into {label, value, source} rows
+  function normalizeFormAnswers(raw: unknown): Array<{ label: string; value: string; source?: string }> {
+    if (!raw) return [];
+    // Legacy array of {fieldLabel, answer}
+    if (Array.isArray(raw)) {
+      return raw.map((a: any) => ({ label: a.fieldLabel ?? a.label ?? '', value: a.answer ?? a.value ?? '' }));
+    }
+    if (typeof raw === 'object') {
+      const obj = raw as Record<string, any>;
+      // ATS-prepared: { atsType, answers: [{label, value, source, required}], unanswered }
+      if (Array.isArray(obj.answers)) {
+        return obj.answers.map((a: any) => ({
+          label: a.label ?? a.fieldId ?? '',
+          value: a.value ?? (a.source === 'unanswered' ? '— needs your input —' : a.type === 'file' ? '(resume/file)' : ''),
+          source: a.source,
+        }));
+      }
+      // Browser apply: { browser: { status, detail, filledFields } }
+      if (obj.browser) {
+        const b = obj.browser;
+        const rows: Array<{ label: string; value: string; source?: string }> = [
+          { label: 'Apply method', value: 'Browser automation (Indeed)', source: 'browser' },
+          { label: 'Status', value: String(b.detail ?? b.status ?? '') },
+        ];
+        if (b.filledFields && typeof b.filledFields === 'object') {
+          for (const [k, v] of Object.entries(b.filledFields)) rows.push({ label: k, value: String(v) });
+        }
+        return rows;
+      }
+    }
+    return [];
+  }
+
   function renderFormAnswers() {
-    if (!application?.formAnswers || application.formAnswers.length === 0) {
+    const rows = normalizeFormAnswers(application?.formAnswers);
+    if (rows.length === 0) {
       return (
-        <Card>
+        <Card className="border-border/60 shadow-soft">
           <CardContent className="p-5">
             <div className="flex flex-col items-center justify-center py-8">
               <MessageSquare className="w-8 h-8 text-muted-foreground mb-3" />
@@ -581,41 +691,85 @@ export function ApplicationDetail() {
       );
     }
 
+    const editing = editedAnswers !== null;
+
     return (
-      <Card>
+      <Card className="border-border/60 shadow-soft">
         <CardHeader>
-          <CardTitle className="text-lg">Form Answers</CardTitle>
-          <CardDescription>
-            Answers the agent filled in on the application form.
-          </CardDescription>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-lg">Form Answers</CardTitle>
+              <CardDescription>
+                Review and edit what the agent will submit. Values come from your profile, your
+                saved answers, or AI — correct anything before approving.
+              </CardDescription>
+            </div>
+            {!editing ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setEditedAnswers(Object.fromEntries(rows.map((r, i) => [i, r.value])))
+                }
+              >
+                Edit answers
+              </Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setEditedAnswers(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={savingAnswers}
+                  onClick={() => handleSaveAnswers(rows)}
+                >
+                  {savingAnswers ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save answers'}
+                </Button>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-lg border overflow-hidden">
+          <div className="rounded-xl border border-border/60 overflow-hidden">
             <table className="w-full">
               <thead>
                 <tr className="bg-muted/50">
-                  <th className="text-left text-xs font-medium text-muted-foreground p-3 w-1/3">
+                  <th className="text-left text-xs font-medium uppercase tracking-wide text-muted-foreground p-3 w-1/3">
                     Field
                   </th>
-                  <th className="text-left text-xs font-medium text-muted-foreground p-3">
+                  <th className="text-left text-xs font-medium uppercase tracking-wide text-muted-foreground p-3">
                     Answer
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {application.formAnswers.map((answer, idx) => (
+                {rows.map((answer, idx) => (
                   <tr
                     key={idx}
                     className={cn(
-                      'border-t',
+                      'border-t border-border/60 transition-colors hover:bg-muted/50',
                       idx % 2 === 0 ? 'bg-background' : 'bg-muted/20',
                     )}
                   >
                     <td className="p-3 text-sm font-medium text-foreground align-top">
-                      {answer.fieldLabel}
+                      {answer.label}
+                      {answer.source && answer.source !== 'browser' && (
+                        <span className="ml-2 text-[10px] text-muted-foreground/60">({answer.source})</span>
+                      )}
                     </td>
                     <td className="p-3 text-sm text-muted-foreground">
-                      {answer.answer}
+                      {editing ? (
+                        <Input
+                          value={editedAnswers?.[idx] ?? ''}
+                          onChange={(e) =>
+                            setEditedAnswers((prev) => ({ ...(prev ?? {}), [idx]: e.target.value }))
+                          }
+                          className="h-8 bg-background"
+                        />
+                      ) : (
+                        answer.value
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -627,6 +781,60 @@ export function ApplicationDetail() {
     );
   }
 
+  async function handleSaveAnswers(rows: Array<{ label: string; value: string; source?: string }>) {
+    if (!id || !editedAnswers) return;
+    setSavingAnswers(true);
+    try {
+      const answers = rows.map((r, i) => ({
+        label: r.label,
+        value: editedAnswers[i] ?? r.value,
+        source: editedAnswers[i] !== undefined && editedAnswers[i] !== r.value ? 'edited' : r.source,
+      }));
+      await apiClient.put(`/applications/${id}/form-answers`, { answers: { answers } });
+      setEditedAnswers(null);
+      await fetchApplication();
+    } catch {
+      // surfaced via existing error handling
+    } finally {
+      setSavingAnswers(false);
+    }
+  }
+
+  function renderLlmUsage() {
+    const reqs = (application as any)?.llmRequests as Array<any> | undefined;
+    if (!reqs || reqs.length === 0) {
+      return (
+        <p className="text-xs text-muted-foreground">
+          No AI calls were needed for this application — answers came from your profile and saved
+          answers (no LLM cost).
+        </p>
+      );
+    }
+    const totalCents = reqs.reduce((s, r) => s + (r.costCents ?? r.cost_cents ?? 0), 0);
+    return (
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          {reqs.length} AI call{reqs.length === 1 ? '' : 's'} · total ${(totalCents / 100).toFixed(4)}
+        </p>
+        <div className="rounded-xl border border-border/60 divide-y divide-border/60">
+          {reqs.map((r, i) => (
+            <div key={i} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+              <span className="font-medium">{r.agentName ?? r.agent_name ?? r.taskType ?? r.task_type}</span>
+              <span className="font-mono text-muted-foreground">{r.provider}/{r.model}</span>
+              <span className="text-muted-foreground tabular-nums">
+                {(r.inputTokens ?? r.input_tokens ?? 0) + (r.outputTokens ?? r.output_tokens ?? 0)} tok
+              </span>
+              <span className="tabular-nums">${(((r.costCents ?? r.cost_cents) ?? 0) / 100).toFixed(4)}</span>
+              <span className={cn((r.status === 'error') ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400')}>
+                {r.status ?? 'ok'}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   // -------------------------------------------------------------------------
   // Render: Emails Tab
   // -------------------------------------------------------------------------
@@ -634,7 +842,7 @@ export function ApplicationDetail() {
   function renderEmails() {
     if (!application?.emails || application.emails.length === 0) {
       return (
-        <Card>
+        <Card className="border-border/60 shadow-soft">
           <CardContent className="p-5">
             <div className="flex flex-col items-center justify-center py-8">
               <Mail className="w-8 h-8 text-muted-foreground mb-3" />
@@ -648,7 +856,7 @@ export function ApplicationDetail() {
     }
 
     return (
-      <Card>
+      <Card className="border-border/60 shadow-soft">
         <CardHeader>
           <CardTitle className="text-lg">Related Emails</CardTitle>
           <CardDescription>
@@ -659,7 +867,7 @@ export function ApplicationDetail() {
           {application.emails.map((email) => (
             <div
               key={email.id}
-              className="flex items-start gap-3 rounded-lg border p-3"
+              className="flex items-start gap-3 rounded-xl border border-border/60 p-3 transition-colors hover:bg-muted/50"
             >
               <Mail className="w-4 h-4 text-muted-foreground mt-1 shrink-0" />
               <div className="flex-1 min-w-0">
@@ -690,7 +898,7 @@ export function ApplicationDetail() {
   function renderCompanyBrief() {
     if (!application?.companyBrief) {
       return (
-        <Card>
+        <Card className="border-border/60 shadow-soft">
           <CardContent className="p-5">
             <div className="flex flex-col items-center justify-center py-8">
               <Building2 className="w-8 h-8 text-muted-foreground mb-3" />
@@ -706,7 +914,7 @@ export function ApplicationDetail() {
     const brief = application.companyBrief;
 
     return (
-      <Card>
+      <Card className="border-border/60 shadow-soft">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Building2 className="w-5 h-5" />
@@ -779,16 +987,17 @@ export function ApplicationDetail() {
   function renderTimeline() {
     if (eventsLoading) {
       return (
-        <div className="flex flex-col items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
-          <p className="text-sm text-muted-foreground">Loading timeline...</p>
+        <div className="space-y-3" aria-busy="true" aria-label="Loading timeline">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-16 animate-pulse rounded-xl bg-muted/50" />
+          ))}
         </div>
       );
     }
 
     if (events.length === 0) {
       return (
-        <Card>
+        <Card className="border-border/60 shadow-soft">
           <CardContent className="p-5">
             <div className="flex flex-col items-center justify-center py-8">
               <History className="w-8 h-8 text-muted-foreground mb-3" />
@@ -802,7 +1011,7 @@ export function ApplicationDetail() {
     }
 
     return (
-      <Card>
+      <Card className="border-border/60 shadow-soft">
         <CardHeader>
           <CardTitle className="text-lg">Timeline</CardTitle>
           <CardDescription>
@@ -855,7 +1064,7 @@ export function ApplicationDetail() {
   // -------------------------------------------------------------------------
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       {/* Back button */}
       <Button
         variant="ghost"
@@ -867,15 +1076,18 @@ export function ApplicationDetail() {
       </Button>
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              {application.job.title}
-            </h1>
-            <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
-          </div>
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+      <PageHeader
+        title={
+          <span className="inline-flex flex-wrap items-center gap-3">
+            {application.job.title}
+            <Badge variant={statusConfig.variant} className="gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
+              {statusConfig.label}
+            </Badge>
+          </span>
+        }
+        description={
+          <span className="flex items-center gap-3">
             <span className="flex items-center gap-1.5">
               <Building2 className="w-4 h-4" />
               {application.job.company}
@@ -884,72 +1096,89 @@ export function ApplicationDetail() {
               <MapPin className="w-4 h-4" />
               {application.job.location}
             </span>
-          </div>
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex items-center gap-2 shrink-0">
-          {showApproveReject && (
-            <>
+          </span>
+        }
+        actions={
+          <>
+            {showApproveReject && (
+              <>
+                <Button
+                  size="sm"
+                  className="gradient-primary shadow-md shadow-primary/25"
+                  disabled={actionLoading === 'approve'}
+                  onClick={() => handleAction('approve')}
+                >
+                  {actionLoading === 'approve' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4" />
+                  )}
+                  Approve
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={actionLoading === 'reject'}
+                  onClick={() => handleAction('reject')}
+                >
+                  {actionLoading === 'reject' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <XCircle className="w-4 h-4" />
+                  )}
+                  Reject
+                </Button>
+              </>
+            )}
+            {showBrowserSubmit && (
               <Button
                 size="sm"
-                disabled={actionLoading === 'approve'}
-                onClick={() => handleAction('approve')}
+                className="gradient-primary shadow-md shadow-primary/25"
+                disabled={actionLoading === 'submit-assisted'}
+                onClick={() => handleAction('submit-assisted')}
+                title="Open the apply form in Chrome, fill it, attach your resume, and submit"
               >
-                {actionLoading === 'approve' ? (
+                {actionLoading === 'submit-assisted' ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <CheckCircle2 className="w-4 h-4" />
+                  <ExternalLink className="w-4 h-4" />
                 )}
-                Approve
+                Submit in browser
               </Button>
+            )}
+            {showRetry && (
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={actionLoading === 'retry'}
+                onClick={() => handleAction('retry')}
+              >
+                {actionLoading === 'retry' ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-4 h-4" />
+                )}
+                Retry
+              </Button>
+            )}
+            {showWithdraw && (
               <Button
                 size="sm"
                 variant="outline"
-                disabled={actionLoading === 'reject'}
-                onClick={() => handleAction('reject')}
+                disabled={actionLoading === 'withdraw'}
+                onClick={() => handleAction('withdraw')}
               >
-                {actionLoading === 'reject' ? (
+                {actionLoading === 'withdraw' ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <XCircle className="w-4 h-4" />
+                  <Ban className="w-4 h-4" />
                 )}
-                Reject
+                Withdraw
               </Button>
-            </>
-          )}
-          {showRetry && (
-            <Button
-              size="sm"
-              variant="destructive"
-              disabled={actionLoading === 'retry'}
-              onClick={() => handleAction('retry')}
-            >
-              {actionLoading === 'retry' ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <RotateCcw className="w-4 h-4" />
-              )}
-              Retry
-            </Button>
-          )}
-          {showWithdraw && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={actionLoading === 'withdraw'}
-              onClick={() => handleAction('withdraw')}
-            >
-              {actionLoading === 'withdraw' ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Ban className="w-4 h-4" />
-              )}
-              Withdraw
-            </Button>
-          )}
-        </div>
-      </div>
+            )}
+          </>
+        }
+      />
 
       {/* Error banner */}
       {error && (
@@ -1005,7 +1234,16 @@ export function ApplicationDetail() {
         <TabsContent value="overview">{renderOverview()}</TabsContent>
         <TabsContent value="scores">{renderScores()}</TabsContent>
         <TabsContent value="documents">{renderDocuments()}</TabsContent>
-        <TabsContent value="form-answers">{renderFormAnswers()}</TabsContent>
+        <TabsContent value="form-answers" className="space-y-4">
+          {renderFormAnswers()}
+          <Card className="border-border/60 shadow-soft">
+            <CardHeader>
+              <CardTitle className="text-base">AI Usage</CardTitle>
+              <CardDescription>LLM calls made while preparing this application.</CardDescription>
+            </CardHeader>
+            <CardContent>{renderLlmUsage()}</CardContent>
+          </Card>
+        </TabsContent>
         <TabsContent value="emails">{renderEmails()}</TabsContent>
         <TabsContent value="company">{renderCompanyBrief()}</TabsContent>
         <TabsContent value="timeline">{renderTimeline()}</TabsContent>

@@ -14,7 +14,35 @@ export class InboxService implements IInboxService {
   ) {}
 
   async list(userId: string) {
-    return this.repo.list(userId);
+    // Only surface emails about jobs the user applied to through this portal:
+    // job-related classification AND mentioning an applied-to company (or
+    // explicitly linked to an application).
+    const [emails, companies] = await Promise.all([
+      this.repo.list(userId),
+      this.repo.getAppliedCompanyNames(userId),
+    ]);
+
+    const jobClassifications = new Set([
+      'interview',
+      'offer',
+      'rejection',
+      'acknowledgement',
+      'recruiter',
+    ]);
+    const companyNeedles = companies
+      .map((c) => c.toLowerCase().trim())
+      .filter((c) => c.length > 2);
+
+    return (emails as Array<Record<string, unknown>>).filter((email) => {
+      if (email.applicationId) return true;
+      const classification = String(email.classification ?? '');
+      if (!jobClassifications.has(classification)) return false;
+      if (companyNeedles.length === 0) return false;
+      const haystack = [email.fromAddress, email.subject, email.bodyPreview]
+        .map((v) => String(v ?? '').toLowerCase())
+        .join(' ');
+      return companyNeedles.some((c) => haystack.includes(c));
+    });
   }
 
   async processEmail(userId: string, email: Record<string, unknown>) {

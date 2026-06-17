@@ -4,6 +4,9 @@ import type { ZodSchema } from 'zod';
 import type { Redis } from 'ioredis';
 import type { AgentContext, ModelTier, TaskType } from '@auto-job-apply/shared-types';
 import { createLogger } from '@auto-job-apply/shared-utils';
+import { userPreferences } from '@auto-job-apply/db';
+import type { Database } from '@auto-job-apply/db';
+import { DRIZZLE_CLIENT } from '../core/database/database.constants.js';
 import { REDIS_CLIENT } from '../core/redis/redis.constants.js';
 import { EVENT_BUS } from '../core/event-bus/event-bus.constants.js';
 import type { IEventBus } from '../core/event-bus/interfaces/event-bus.interface.js';
@@ -15,6 +18,7 @@ import { PromptRegistry } from './prompt-registry.js';
 import { RequestLogger } from './request-logger.js';
 import { OpenAIProvider } from './providers/openai.provider.js';
 import { AnthropicProvider } from './providers/anthropic.provider.js';
+import { GeminiProvider } from './providers/gemini.provider.js';
 import { OllamaProvider } from './providers/ollama.provider.js';
 
 const logger = createLogger({ name: 'llm-service' });
@@ -28,14 +32,17 @@ export class LlmService implements ILLMService, OnModuleInit {
     private readonly costTracker: CostTracker,
     private readonly requestLogger: RequestLogger,
     private readonly configService: ConfigService,
+    @Inject(DRIZZLE_CLIENT) private readonly db: Database,
   ) {
     this.promptRegistry = new PromptRegistry();
   }
 
-  onModuleInit() {
+  async onModuleInit() {
     // Register providers based on available API keys
     const openaiKey = this.configService.get<string>('OPENAI_API_KEY');
     const anthropicKey = this.configService.get<string>('ANTHROPIC_API_KEY');
+    const geminiKey = this.configService.get<string>('GEMINI_API_KEY');
+    const geminiModel = this.configService.get<string>('GEMINI_MODEL');
     const ollamaUrl = this.configService.get<string>('OLLAMA_BASE_URL');
 
     if (openaiKey) {
@@ -44,10 +51,51 @@ export class LlmService implements ILLMService, OnModuleInit {
     if (anthropicKey) {
       this.modelRouter.registerProvider(new AnthropicProvider(anthropicKey));
     }
+    if (geminiKey) {
+      this.modelRouter.registerProvider(new GeminiProvider(geminiKey, geminiModel));
+    }
     this.modelRouter.registerProvider(new OllamaProvider(ollamaUrl));
+
+    await this.registerSavedProviders();
 
     this.registerDefaultPrompts();
     logger.info('LLM service initialized');
+  }
+
+  /** Restore providers users configured through the Settings page. */
+  private async registerSavedProviders() {
+    try {
+      const rows = await this.db.select().from(userPreferences);
+      for (const row of rows) {
+        const ui = (row as { uiSettings?: Record<string, unknown> | null }).uiSettings;
+        if (!ui) continue;
+        const provider = ui.llmProvider as string | undefined;
+        const apiKey = ui.llmApiKey as string | undefined;
+        const model = ui.llmModel as string | undefined;
+        const baseUrl = ui.ollamaUrl as string | undefined;
+
+        switch (provider) {
+          case 'openai':
+            if (apiKey) this.modelRouter.registerProvider(new OpenAIProvider(apiKey));
+            break;
+          case 'anthropic':
+            if (apiKey) this.modelRouter.registerProvider(new AnthropicProvider(apiKey));
+            break;
+          case 'gemini':
+            if (apiKey) this.modelRouter.registerProvider(new GeminiProvider(apiKey, model));
+            break;
+          case 'ollama':
+            this.modelRouter.registerProvider(new OllamaProvider(baseUrl));
+            break;
+          default:
+            continue;
+        }
+        this.modelRouter.preferProvider(provider!);
+        logger.info({ provider, model }, 'Registered user-configured LLM provider');
+      }
+    } catch (err) {
+      logger.warn({ error: err }, 'Could not load saved LLM provider settings');
+    }
   }
 
   async generateText(
@@ -134,7 +182,10 @@ export class LlmService implements ILLMService, OnModuleInit {
 
       return { ...response, model: modelId, provider: provider.name, costCents };
     } catch (err) {
-      logger.error({ error: err, taskType, model: modelId }, 'LLM structured request failed');
+      logger.error(
+        { err, message: err instanceof Error ? err.message : String(err), taskType, model: modelId },
+        'LLM structured request failed',
+      );
       throw err;
     }
   }

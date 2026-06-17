@@ -19,11 +19,16 @@ export function OverviewTab() {
     : 0;
 
   const status = agentStatus?.status ?? 'unknown';
-  const healthColor = totalFailed > 10
+  const healthChip = totalFailed > 10
+    ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+    : totalFailed > 0 || status === 'paused'
+      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+      : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
+  const healthDot = totalFailed > 10
     ? 'bg-red-500'
     : totalFailed > 0 || status === 'paused'
-      ? 'bg-yellow-500'
-      : 'bg-green-500';
+      ? 'bg-amber-500'
+      : 'bg-emerald-500';
   const healthLabel = totalFailed > 10
     ? 'Degraded'
     : totalFailed > 0 || status === 'paused'
@@ -35,65 +40,73 @@ export function OverviewTab() {
   return (
     <div className="space-y-4">
       {/* System health */}
-      <div className="flex items-center gap-2">
-        <div className={`h-2.5 w-2.5 rounded-full ${healthColor}`} />
-        <span className="text-sm font-medium">System: {healthLabel}</span>
+      <div
+        className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium ${healthChip}`}
+      >
+        <span className={`h-2 w-2 rounded-full ${healthDot}`} />
+        System: {healthLabel}
       </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <Bot className="h-5 w-5 text-primary" />
+        <Card className="border-border/60 p-5 shadow-soft card-hover">
+          <div className="flex items-center gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Bot className="h-5 w-5" />
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Agent Status</p>
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium text-muted-foreground">Agent Status</p>
               <div className="flex items-center gap-2">
-                <p className="text-lg font-semibold capitalize">{status}</p>
+                <p className="text-xl font-bold capitalize tracking-tight">{status}</p>
                 {status === 'running' && (
-                  <Badge variant="default" className="text-xs">Active</Badge>
+                  <Badge variant="default" className="gap-1 text-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                    Active
+                  </Badge>
                 )}
                 {status === 'paused' && (
-                  <Badge variant="secondary" className="text-xs">Paused</Badge>
+                  <Badge variant="secondary" className="gap-1 text-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                    Paused
+                  </Badge>
                 )}
               </div>
             </div>
           </div>
         </Card>
 
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-yellow-500/10">
-              <DollarSign className="h-5 w-5 text-yellow-600" />
+        <Card className="border-border/60 p-5 shadow-soft card-hover">
+          <div className="flex items-center gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <DollarSign className="h-5 w-5" />
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Today's LLM Spend</p>
-              <p className="text-lg font-semibold">${dailySpend}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
-              <Layers className="h-5 w-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Active Jobs</p>
-              <p className="text-lg font-semibold">{totalActive}</p>
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium text-muted-foreground">Today's LLM Spend</p>
+              <p className="text-3xl font-bold tracking-tight tabular-nums">${dailySpend}</p>
             </div>
           </div>
         </Card>
 
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
-              <Clock className="h-5 w-5 text-blue-600" />
+        <Card className="border-border/60 p-5 shadow-soft card-hover">
+          <div className="flex items-center gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <Layers className="h-5 w-5" />
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Queued Jobs</p>
-              <p className="text-lg font-semibold">{totalWaiting}</p>
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium text-muted-foreground">Active Jobs</p>
+              <p className="text-3xl font-bold tracking-tight tabular-nums">{totalActive}</p>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="border-border/60 p-5 shadow-soft card-hover">
+          <div className="flex items-center gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+              <Clock className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium text-muted-foreground">Queued Jobs</p>
+              <p className="text-3xl font-bold tracking-tight tabular-nums">{totalWaiting}</p>
             </div>
           </div>
         </Card>

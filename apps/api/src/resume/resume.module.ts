@@ -6,6 +6,7 @@ import { ResumeRepository } from './resume.repository.js';
 import { AtsScorer } from './ats-scorer.js';
 import { ResumeTailorAgent } from './agents/resume-tailor.agent.js';
 import { CoverLetterAgent } from './agents/cover-letter.agent.js';
+import { ResumeExtractorAgent } from './agents/resume-extractor.agent.js';
 import { PdfGenerator } from './export/pdf-generator.js';
 import { HtmlPdfGenerator } from './export/html-pdf-generator.js';
 import { DocxGenerator } from './export/docx-generator.js';
@@ -20,10 +21,11 @@ import { RESUME_SERVICE, RESUME_REPOSITORY } from './resume.constants.js';
     AtsScorer,
     ResumeTailorAgent,
     CoverLetterAgent,
+    ResumeExtractorAgent,
     PdfGenerator,
     HtmlPdfGenerator,
     DocxGenerator,
   ],
-  exports: [RESUME_SERVICE, AtsScorer, ResumeTailorAgent, CoverLetterAgent, PdfGenerator, HtmlPdfGenerator, DocxGenerator],
+  exports: [RESUME_SERVICE, AtsScorer, ResumeTailorAgent, CoverLetterAgent, ResumeExtractorAgent, PdfGenerator, HtmlPdfGenerator, DocxGenerator],
 })
 export class ResumeModule {}

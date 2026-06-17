@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, gte, sql, desc } from 'drizzle-orm';
+import { eq, and, gte, sql, desc, inArray } from 'drizzle-orm';
 import { jobs, applications, llmRequests, agentWorkLogs } from '@auto-job-apply/db';
 import type { Database } from '@auto-job-apply/db';
 import { DRIZZLE_CLIENT } from '../core/database/database.constants.js';
@@ -13,7 +13,7 @@ export class AnalyticsRepository implements IAnalyticsRepository {
     const [totalJobs, totalApplications, pendingApplications, interviewCount, offerCount] = await Promise.all([
       this.db.select({ count: sql<number>`count(*)` }).from(jobs).where(eq(jobs.userId, userId)),
       this.db.select({ count: sql<number>`count(*)` }).from(applications).where(eq(applications.userId, userId)),
-      this.db.select({ count: sql<number>`count(*)` }).from(applications).where(and(eq(applications.userId, userId), eq(applications.status, 'queued'))),
+      this.db.select({ count: sql<number>`count(*)` }).from(applications).where(and(eq(applications.userId, userId), inArray(applications.status, ['pending_review', 'needs_captcha', 'needs_login', 'queued']))),
       this.db.select({ count: sql<number>`count(*)` }).from(applications).where(and(eq(applications.userId, userId), eq(applications.status, 'interview'))),
       this.db.select({ count: sql<number>`count(*)` }).from(applications).where(and(eq(applications.userId, userId), eq(applications.status, 'offer'))),
     ]);
@@ -28,7 +28,7 @@ export class AnalyticsRepository implements IAnalyticsRepository {
   }
 
   async getFunnel(userId: string) {
-    const statuses = ['queued', 'in_progress', 'submitted', 'confirmed', 'interview', 'offer', 'rejected', 'withdrawn', 'failed'];
+    const statuses = ['queued', 'in_progress', 'pending_review', 'needs_captcha', 'needs_login', 'submitted', 'confirmed', 'interview', 'offer', 'rejected', 'withdrawn', 'failed'];
     const funnel: Record<string, number> = {};
 
     for (const status of statuses) {
@@ -117,5 +117,60 @@ export class AnalyticsRepository implements IAnalyticsRepository {
       orderBy: [desc(agentWorkLogs.createdAt)],
       limit,
     });
+  }
+
+  async getResponseRate(userId: string, days: number) {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const rows = await this.db
+      .select({
+        date: sql<string>`TO_CHAR(created_at::date, 'YYYY-MM-DD')`,
+        total: sql<number>`count(*)`,
+        responses: sql<number>`count(*) FILTER (WHERE status IN ('interview', 'offer'))`,
+      })
+      .from(applications)
+      .where(and(eq(applications.userId, userId), gte(applications.createdAt, since)))
+      .groupBy(sql`created_at::date`)
+      .orderBy(sql`created_at::date`);
+
+    return rows.map((r) => ({
+      date: r.date,
+      rate: Number(r.total) > 0 ? Math.round((Number(r.responses) / Number(r.total)) * 100) : 0,
+    }));
+  }
+
+  async getSourceEffectiveness(userId: string) {
+    const rows = await this.db
+      .select({
+        source: sql<string>`COALESCE(${jobs.sourceChannel}, 'unknown')`,
+        applications: sql<number>`count(*)`,
+        interviews: sql<number>`count(*) FILTER (WHERE ${applications.status} = 'interview')`,
+        offers: sql<number>`count(*) FILTER (WHERE ${applications.status} = 'offer')`,
+      })
+      .from(applications)
+      .leftJoin(jobs, eq(applications.jobId, jobs.id))
+      .where(eq(applications.userId, userId))
+      .groupBy(sql`COALESCE(${jobs.sourceChannel}, 'unknown')`);
+
+    return rows.map((r) => ({
+      source: r.source,
+      applications: Number(r.applications),
+      interviews: Number(r.interviews),
+      offers: Number(r.offers),
+    }));
+  }
+
+  async getCostTrends(userId: string, days: number) {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const rows = await this.db
+      .select({
+        date: sql<string>`TO_CHAR(created_at::date, 'YYYY-MM-DD')`,
+        costCents: sql<number>`COALESCE(SUM(cost_cents), 0)`,
+      })
+      .from(llmRequests)
+      .where(and(eq(llmRequests.userId, userId), gte(llmRequests.createdAt, since)))
+      .groupBy(sql`created_at::date`)
+      .orderBy(sql`created_at::date`);
+
+    return rows.map((r) => ({ date: r.date, costCents: Number(r.costCents) }));
   }
 }

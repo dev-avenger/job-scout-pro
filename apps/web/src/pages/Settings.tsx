@@ -8,6 +8,8 @@ import { Separator } from '../components/ui/separator';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
 import { Switch } from '../components/ui/switch';
 import { Slider } from '../components/ui/slider';
+import { Label } from '../components/ui/label';
+import { PageHeader } from '../components/PageHeader';
 import {
   Select,
   SelectTrigger,
@@ -47,7 +49,7 @@ import {
 /* ──────────────────── Types ──────────────────── */
 
 type AutonomyMode = 'supervised' | 'guided' | 'autonomous';
-type LlmProvider = 'openai' | 'anthropic' | 'ollama' | 'custom';
+type LlmProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'custom';
 
 interface SettingsResponse {
   autonomyMode: AutonomyMode;
@@ -57,14 +59,7 @@ interface SettingsResponse {
     monthlyLlmCapCents?: number;
     companyBlacklist?: string[] | null;
     keywordBlacklist?: string[] | null;
-    jobSources?: {
-      linkedin?: boolean;
-      indeed?: boolean;
-      glassdoor?: boolean;
-      googleJobs?: boolean;
-      rss?: boolean;
-      csv?: boolean;
-    };
+    jobSources?: Record<string, boolean>;
     rssFeedUrls?: string[];
     refreshIntervalHours?: number;
     notifications?: {
@@ -85,6 +80,21 @@ interface SettingsResponse {
     llmApiKey?: string;
     ollamaUrl?: string;
     temperature?: number;
+    emailImap?: {
+      host?: string;
+      port?: number;
+      secure?: boolean;
+      username?: string;
+      password?: string;
+    };
+    emailSmtp?: {
+      host?: string;
+      port?: number;
+      secure?: boolean;
+      username?: string;
+      password?: string;
+      fromAddress?: string;
+    };
   };
 }
 
@@ -149,6 +159,7 @@ const AUTONOMY_OPTIONS: {
 const LLM_PROVIDERS: { value: LlmProvider; label: string }[] = [
   { value: 'openai', label: 'OpenAI' },
   { value: 'anthropic', label: 'Anthropic' },
+  { value: 'gemini', label: 'Google Gemini' },
   { value: 'ollama', label: 'Ollama' },
   { value: 'custom', label: 'Custom' },
 ];
@@ -156,17 +167,30 @@ const LLM_PROVIDERS: { value: LlmProvider; label: string }[] = [
 const MODELS_BY_PROVIDER: Record<LlmProvider, string[]> = {
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
   anthropic: ['claude-sonnet-4-20250514', 'claude-haiku-4-20250414', 'claude-3-5-sonnet-20241022'],
+  gemini: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro'],
   ollama: ['llama3', 'llama3:70b', 'mistral', 'mixtral', 'codellama', 'phi3'],
   custom: ['custom'],
 };
 
+// Keys match the API source names so toggling here actually enables/disables
+// the source during searches.
 const JOB_SOURCES = [
-  { key: 'linkedin' as const, label: 'LinkedIn', icon: Globe },
-  { key: 'indeed' as const, label: 'Indeed', icon: Globe },
-  { key: 'glassdoor' as const, label: 'Glassdoor', icon: Globe },
-  { key: 'googleJobs' as const, label: 'Google Jobs', icon: Globe },
-  { key: 'rss' as const, label: 'RSS Feeds', icon: Rss },
-  { key: 'csv' as const, label: 'CSV Import', icon: Server },
+  { key: 'remoteok' as const, label: 'RemoteOK', icon: Globe },
+  { key: 'arbeitnow' as const, label: 'Arbeitnow', icon: Globe },
+  { key: 'remotive' as const, label: 'Remotive', icon: Globe },
+  { key: 'jobicy' as const, label: 'Jobicy', icon: Globe },
+  { key: 'himalayas' as const, label: 'Himalayas', icon: Globe },
+  { key: 'themuse' as const, label: 'The Muse', icon: Globe },
+  { key: 'bayt' as const, label: 'Bayt (Pakistan/Gulf)', icon: Globe },
+  { key: 'jooble' as const, label: 'Jooble (API key)', icon: Globe },
+  { key: 'brightspyre' as const, label: 'BrightSpyre (Pakistan)', icon: Globe },
+  { key: 'pakpositions' as const, label: 'PakPositions (Pakistan)', icon: Globe },
+  { key: 'company_watchlist' as const, label: 'Company Watchlist', icon: Globe },
+  { key: 'rss_feed' as const, label: 'RSS Feeds', icon: Rss },
+  { key: 'indeed_api' as const, label: 'Indeed (scraper)', icon: Globe },
+  { key: 'linkedin' as const, label: 'LinkedIn — company-site jobs (scraper)', icon: Globe },
+  { key: 'adzuna_api' as const, label: 'Adzuna (API key)', icon: Globe },
+  { key: 'csv_import' as const, label: 'CSV Import', icon: Server },
 ];
 
 const TAB_ITEMS = [
@@ -185,7 +209,7 @@ let portalIdCounter = 0;
 
 /* ──────────────────── Component ──────────────────── */
 
-export function Settings() {
+export function Settings({ embedded = false }: { embedded?: boolean } = {}) {
   /* ── Loading / Toast state ── */
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -206,12 +230,22 @@ export function Settings() {
 
   /* ── Job Sources state ── */
   const [jobSources, setJobSources] = useState<Record<string, boolean>>({
+    remoteok: true,
+    arbeitnow: true,
+    remotive: true,
+    jobicy: true,
+    himalayas: true,
+    themuse: true,
+    bayt: true,
+    jooble: true,
+    brightspyre: true,
+    pakpositions: true,
+    company_watchlist: true,
+    rss_feed: true,
+    indeed_api: true,
     linkedin: true,
-    indeed: true,
-    glassdoor: false,
-    googleJobs: false,
-    rss: false,
-    csv: false,
+    adzuna_api: true,
+    csv_import: true,
   });
   const [rssFeedUrls, setRssFeedUrls] = useState<string[]>([]);
   const [newRssUrl, setNewRssUrl] = useState('');
@@ -258,8 +292,15 @@ export function Settings() {
   const [testingSmtp, setTestingSmtp] = useState(false);
 
   /* ── Credentials state ── */
-  const [portalCredentials, setPortalCredentials] = useState<PortalCredential[]>([]);
+  // Pre-seed the portals the agent can log into automatically, so the user
+  // just fills username/password rather than guessing what to add.
+  const [portalCredentials, setPortalCredentials] = useState<PortalCredential[]>([
+    { id: 'default-indeed', siteName: 'indeed.com', username: '', password: '' },
+  ]);
   const [savingCredentials, setSavingCredentials] = useState(false);
+  const [testingCredId, setTestingCredId] = useState<string | null>(null);
+  const [credTestResult, setCredTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const [indeedHeadful, setIndeedHeadful] = useState(true);
 
   /* ── Danger Zone state ── */
   const [exporting, setExporting] = useState(false);
@@ -324,6 +365,45 @@ export function Settings() {
           if (n.channels) setNotifChannels((prev) => ({ ...prev, ...n.channels }));
           if (n.quietHoursFrom) setQuietHoursFrom(n.quietHoursFrom);
           if (n.quietHoursTo) setQuietHoursTo(n.quietHoursTo);
+        }
+        if (typeof (prefs as { indeedHeadful?: boolean }).indeedHeadful === 'boolean') {
+          setIndeedHeadful((prefs as { indeedHeadful?: boolean }).indeedHeadful as boolean);
+        }
+        // Restore saved portal credentials (with stable client-side ids)
+        const savedCreds = (prefs as { portalCredentials?: Array<{ siteName: string; username: string; password: string }> })
+          .portalCredentials;
+        if (Array.isArray(savedCreds) && savedCreds.length > 0) {
+          setPortalCredentials(
+            savedCreds.map((c, i) => ({
+              id: `saved-${i}-${c.siteName}`,
+              siteName: c.siteName ?? '',
+              username: c.username ?? '',
+              password: c.password ?? '',
+            })),
+          );
+        }
+        if (prefs.emailImap) {
+          const i = prefs.emailImap;
+          setImapConfig((prev) => ({
+            ...prev,
+            host: i.host ?? prev.host,
+            port: i.port != null ? String(i.port) : prev.port,
+            secure: i.secure ?? prev.secure,
+            username: i.username ?? prev.username,
+            password: i.password ?? prev.password,
+          }));
+        }
+        if (prefs.emailSmtp) {
+          const s = prefs.emailSmtp;
+          setSmtpConfig((prev) => ({
+            ...prev,
+            host: s.host ?? prev.host,
+            port: s.port != null ? String(s.port) : prev.port,
+            secure: s.secure ?? prev.secure,
+            username: s.username ?? prev.username,
+            password: s.password ?? prev.password,
+            fromAddress: s.fromAddress ?? prev.fromAddress,
+          }));
         }
       } catch (err) {
         addToast('error', err instanceof Error ? err.message : 'Failed to load settings');
@@ -505,6 +585,27 @@ export function Settings() {
     }
   }
 
+  async function handleTestIndeed(cred: PortalCredential) {
+    setTestingCredId(cred.id);
+    setCredTestResult((prev) => ({ ...prev, [cred.id]: { ok: false, message: 'Testing… a browser may open.' } }));
+    try {
+      const res = await apiClient.post<{ success: boolean; status: string; message: string; headful?: boolean }>(
+        '/settings/credentials/test-indeed',
+        { username: cred.username, password: cred.password, headful: indeedHeadful },
+      );
+      setCredTestResult((prev) => ({ ...prev, [cred.id]: { ok: res.success, message: res.message } }));
+      // Server auto-disables visible mode after a successful login (session banked)
+      if (typeof res.headful === 'boolean') setIndeedHeadful(res.headful);
+      addToast(res.success ? 'success' : 'error', res.message);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Test failed';
+      setCredTestResult((prev) => ({ ...prev, [cred.id]: { ok: false, message } }));
+      addToast('error', message);
+    } finally {
+      setTestingCredId(null);
+    }
+  }
+
   async function handleSaveCredentials() {
     setSavingCredentials(true);
     try {
@@ -606,7 +707,7 @@ export function Settings() {
     label?: string;
   }) {
     return (
-      <div className="flex justify-end pt-4">
+      <div className="flex justify-end border-t border-border/60 pt-4">
         <Button onClick={onClick} disabled={saving}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {saving ? 'Saving...' : label}
@@ -631,22 +732,15 @@ export function Settings() {
   /* ──────────────────── Render ──────────────────── */
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Page Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <Settings2 className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-              <p className="text-sm text-muted-foreground">
-                Manage your preferences, integrations, and account.
-              </p>
-            </div>
-          </div>
-        </div>
+    <div className={embedded ? '' : 'min-h-screen bg-background'}>
+      <div className={cn('space-y-6', !embedded && 'p-6 lg:p-8 max-w-5xl mx-auto')}>
+        {/* Page Header (the modal supplies its own) */}
+        {!embedded && (
+          <PageHeader
+            title="Settings"
+            description="Manage your preferences, integrations, and account."
+          />
+        )}
 
         {/* Tabbed Layout */}
         <Tabs defaultValue="autonomy" className="flex flex-col md:flex-row gap-6">
@@ -682,7 +776,7 @@ export function Settings() {
           <div className="flex-1 min-w-0">
             {/* ── Tab 1: Autonomy ── */}
             <TabsContent value="autonomy" className="mt-0">
-              <Card>
+              <Card className="border-border/60 shadow-soft">
                 <CardHeader>
                   <div className="flex items-center gap-2">
                     <Shield className="h-5 w-5 text-primary" />
@@ -742,7 +836,7 @@ export function Settings() {
 
             {/* ── Tab 2: LLM Provider ── */}
             <TabsContent value="llm" className="mt-0">
-              <Card>
+              <Card className="border-border/60 shadow-soft">
                 <CardHeader>
                   <div className="flex items-center gap-2">
                     <Bot className="h-5 w-5 text-primary" />
@@ -756,7 +850,7 @@ export function Settings() {
                   {/* Provider & Model row */}
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium leading-none">Provider</label>
+                      <Label>Provider</Label>
                       <Select
                         value={llmProvider}
                         onValueChange={(v: LlmProvider) => {
@@ -778,7 +872,7 @@ export function Settings() {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-medium leading-none">Model</label>
+                      <Label>Model</Label>
                       <Select value={llmModel} onValueChange={setLlmModel}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select model" />
@@ -796,7 +890,7 @@ export function Settings() {
 
                   {/* API Key */}
                   <div className="space-y-2">
-                    <label className="text-sm font-medium leading-none">API Key</label>
+                    <Label>API Key</Label>
                     <div className="relative">
                       <Key className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
@@ -804,7 +898,7 @@ export function Settings() {
                         value={llmApiKey}
                         onChange={(e) => setLlmApiKey(e.target.value)}
                         placeholder="sk-..."
-                        className="pl-9"
+                        className="pl-9 bg-muted/50"
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
@@ -815,7 +909,7 @@ export function Settings() {
                   {/* Ollama URL (conditional) */}
                   {llmProvider === 'ollama' && (
                     <div className="space-y-2">
-                      <label className="text-sm font-medium leading-none">Ollama URL</label>
+                      <Label>Ollama URL</Label>
                       <div className="relative">
                         <Server className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
@@ -823,7 +917,7 @@ export function Settings() {
                           value={ollamaUrl}
                           onChange={(e) => setOllamaUrl(e.target.value)}
                           placeholder="http://localhost:11434"
-                          className="pl-9"
+                          className="pl-9 bg-muted/50"
                         />
                       </div>
                       <p className="text-xs text-muted-foreground">
@@ -835,7 +929,7 @@ export function Settings() {
                   {/* Temperature */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium leading-none">Temperature</label>
+                      <Label>Temperature</Label>
                       <Badge variant="secondary" className="font-mono text-xs">
                         {temperature.toFixed(1)}
                       </Badge>
@@ -864,9 +958,7 @@ export function Settings() {
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
-                        <label htmlFor="dailyCap" className="text-sm font-medium leading-none">
-                          Daily Cap
-                        </label>
+                        <Label htmlFor="dailyCap">Daily Cap</Label>
                         <div className="relative">
                           <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                           <Input
@@ -877,15 +969,13 @@ export function Settings() {
                             value={dailyCap}
                             onChange={(e) => setDailyCap(e.target.value)}
                             placeholder="0.00"
-                            className="pl-9"
+                            className="pl-9 bg-muted/50"
                           />
                         </div>
                         <p className="text-xs text-muted-foreground">Maximum spend per day in USD.</p>
                       </div>
                       <div className="space-y-2">
-                        <label htmlFor="monthlyCap" className="text-sm font-medium leading-none">
-                          Monthly Cap
-                        </label>
+                        <Label htmlFor="monthlyCap">Monthly Cap</Label>
                         <div className="relative">
                           <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                           <Input
@@ -896,7 +986,7 @@ export function Settings() {
                             value={monthlyCap}
                             onChange={(e) => setMonthlyCap(e.target.value)}
                             placeholder="0.00"
-                            className="pl-9"
+                            className="pl-9 bg-muted/50"
                           />
                         </div>
                         <p className="text-xs text-muted-foreground">
@@ -913,7 +1003,7 @@ export function Settings() {
 
             {/* ── Tab 3: Job Sources ── */}
             <TabsContent value="sources" className="mt-0">
-              <Card>
+              <Card className="border-border/60 shadow-soft">
                 <CardHeader>
                   <div className="flex items-center gap-2">
                     <Globe className="h-5 w-5 text-primary" />
@@ -926,12 +1016,12 @@ export function Settings() {
                 <CardContent className="space-y-6">
                   {/* Source toggles */}
                   <div className="space-y-3">
-                    <label className="text-sm font-medium">Enabled Sources</label>
+                    <Label>Enabled Sources</Label>
                     <div className="grid gap-3 sm:grid-cols-2">
                       {JOB_SOURCES.map(({ key, label, icon: Icon }) => (
                         <div
                           key={key}
-                          className="flex items-center justify-between rounded-lg border p-3"
+                          className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 p-3"
                         >
                           <div className="flex items-center gap-3">
                             <Icon className="h-4 w-4 text-muted-foreground" />
@@ -952,12 +1042,13 @@ export function Settings() {
 
                   {/* RSS Feed URLs */}
                   <div className="space-y-3">
-                    <label className="text-sm font-medium">RSS Feed URLs</label>
+                    <Label>RSS Feed URLs</Label>
                     <div className="flex gap-2">
                       <Input
                         value={newRssUrl}
                         onChange={(e) => setNewRssUrl(e.target.value)}
                         placeholder="https://example.com/jobs/feed.xml"
+                        className="bg-muted/50"
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
@@ -974,7 +1065,7 @@ export function Settings() {
                         {rssFeedUrls.map((url) => (
                           <div
                             key={url}
-                            className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2"
+                            className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2"
                           >
                             <Rss className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                             <span className="flex-1 truncate text-sm">{url}</span>
@@ -998,7 +1089,7 @@ export function Settings() {
 
                   {/* Refresh Interval */}
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Refresh Interval</label>
+                    <Label>Refresh Interval</Label>
                     <div className="flex items-center gap-2">
                       <Input
                         type="number"
@@ -1006,7 +1097,7 @@ export function Settings() {
                         max="168"
                         value={refreshInterval}
                         onChange={(e) => setRefreshInterval(e.target.value)}
-                        className="w-24"
+                        className="w-24 bg-muted/50"
                       />
                       <span className="text-sm text-muted-foreground">hours</span>
                     </div>
@@ -1022,7 +1113,7 @@ export function Settings() {
 
             {/* ── Tab 4: Notifications ── */}
             <TabsContent value="notifications" className="mt-0">
-              <Card>
+              <Card className="border-border/60 shadow-soft">
                 <CardHeader>
                   <div className="flex items-center gap-2">
                     <Bell className="h-5 w-5 text-primary" />
@@ -1035,9 +1126,9 @@ export function Settings() {
                 <CardContent className="space-y-6">
                   {/* Delivery methods */}
                   <div className="space-y-3">
-                    <label className="text-sm font-medium">Delivery Methods</label>
+                    <Label>Delivery Methods</Label>
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 p-3">
                         <div className="flex items-center gap-3">
                           <Mail className="h-4 w-4 text-muted-foreground" />
                           <div>
@@ -1052,7 +1143,7 @@ export function Settings() {
                           onCheckedChange={setEmailNotifications}
                         />
                       </div>
-                      <div className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 p-3">
                         <div className="flex items-center gap-3">
                           <Bell className="h-4 w-4 text-muted-foreground" />
                           <div>
@@ -1067,7 +1158,7 @@ export function Settings() {
                           onCheckedChange={setInAppNotifications}
                         />
                       </div>
-                      <div className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 p-3">
                         <div className="flex items-center gap-3">
                           <Radio className="h-4 w-4 text-muted-foreground" />
                           <div>
@@ -1086,7 +1177,7 @@ export function Settings() {
 
                   {/* Notification channels */}
                   <div className="space-y-3">
-                    <label className="text-sm font-medium">Notification Channels</label>
+                    <Label>Notification Channels</Label>
                     <div className="grid gap-3 sm:grid-cols-2">
                       {(
                         [
@@ -1114,7 +1205,7 @@ export function Settings() {
                       ).map(({ key, label, desc }) => (
                         <div
                           key={key}
-                          className="flex items-center justify-between rounded-lg border p-3"
+                          className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 p-3"
                         >
                           <div>
                             <p className="text-sm font-medium">{label}</p>
@@ -1137,29 +1228,29 @@ export function Settings() {
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <Clock className="h-4 w-4 text-muted-foreground" />
-                      <label className="text-sm font-medium">Quiet Hours</label>
+                      <Label>Quiet Hours</Label>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Pause non-critical notifications during these hours.
                     </p>
                     <div className="flex items-center gap-3">
                       <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">From</label>
+                        <Label className="text-xs font-normal text-muted-foreground">From</Label>
                         <Input
                           type="time"
                           value={quietHoursFrom}
                           onChange={(e) => setQuietHoursFrom(e.target.value)}
-                          className="w-32"
+                          className="w-32 bg-muted/50"
                         />
                       </div>
                       <span className="text-muted-foreground pt-5">to</span>
                       <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">To</label>
+                        <Label className="text-xs font-normal text-muted-foreground">To</Label>
                         <Input
                           type="time"
                           value={quietHoursTo}
                           onChange={(e) => setQuietHoursTo(e.target.value)}
-                          className="w-32"
+                          className="w-32 bg-muted/50"
                         />
                       </div>
                     </div>
@@ -1172,7 +1263,7 @@ export function Settings() {
 
             {/* ── Tab 5: Blacklists ── */}
             <TabsContent value="blacklists" className="mt-0">
-              <Card>
+              <Card className="border-border/60 shadow-soft">
                 <CardHeader>
                   <div className="flex items-center gap-2">
                     <Ban className="h-5 w-5 text-primary" />
@@ -1184,9 +1275,7 @@ export function Settings() {
                 </CardHeader>
                 <CardContent className="space-y-5">
                   <div className="space-y-2">
-                    <label htmlFor="companyBlacklist" className="text-sm font-medium leading-none">
-                      Company Blacklist
-                    </label>
+                    <Label htmlFor="companyBlacklist">Company Blacklist</Label>
                     <textarea
                       id="companyBlacklist"
                       rows={4}
@@ -1194,7 +1283,7 @@ export function Settings() {
                       onChange={(e) => setCompanyBlacklist(e.target.value)}
                       placeholder="Enter one company per line..."
                       className={cn(
-                        'flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors resize-y min-h-[100px]',
+                        'flex w-full rounded-lg border border-input bg-muted/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors resize-y min-h-[100px]',
                       )}
                     />
                     <p className="text-xs text-muted-foreground">One company name per line.</p>
@@ -1203,9 +1292,7 @@ export function Settings() {
                   <Separator />
 
                   <div className="space-y-2">
-                    <label htmlFor="keywordBlacklist" className="text-sm font-medium leading-none">
-                      Keyword Blacklist
-                    </label>
+                    <Label htmlFor="keywordBlacklist">Keyword Blacklist</Label>
                     <textarea
                       id="keywordBlacklist"
                       rows={4}
@@ -1213,7 +1300,7 @@ export function Settings() {
                       onChange={(e) => setKeywordBlacklist(e.target.value)}
                       placeholder="Enter one keyword per line..."
                       className={cn(
-                        'flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors resize-y min-h-[100px]',
+                        'flex w-full rounded-lg border border-input bg-muted/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors resize-y min-h-[100px]',
                       )}
                     />
                     <p className="text-xs text-muted-foreground">One keyword per line.</p>
@@ -1226,7 +1313,7 @@ export function Settings() {
 
             {/* ── Tab 6: Email ── */}
             <TabsContent value="email" className="mt-0">
-              <Card>
+              <Card className="border-border/60 shadow-soft">
                 <CardHeader>
                   <div className="flex items-center gap-2">
                     <Mail className="h-5 w-5 text-primary" />
@@ -1260,48 +1347,48 @@ export function Settings() {
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Host</label>
+                        <Label>Host</Label>
                         <Input
                           value={imapConfig.host}
                           onChange={(e) =>
                             setImapConfig((prev) => ({ ...prev, host: e.target.value }))
                           }
-                          placeholder="imap.gmail.com"
+                          placeholder="imap.gmail.com" className="bg-muted/50"
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Port</label>
+                        <Label>Port</Label>
                         <Input
                           value={imapConfig.port}
                           onChange={(e) =>
                             setImapConfig((prev) => ({ ...prev, port: e.target.value }))
                           }
-                          placeholder="993"
+                          placeholder="993" className="bg-muted/50"
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Username</label>
+                        <Label>Username</Label>
                         <Input
                           value={imapConfig.username}
                           onChange={(e) =>
                             setImapConfig((prev) => ({ ...prev, username: e.target.value }))
                           }
-                          placeholder="you@example.com"
+                          placeholder="you@example.com" className="bg-muted/50"
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Password</label>
+                        <Label>Password</Label>
                         <Input
                           type="password"
                           value={imapConfig.password}
                           onChange={(e) =>
                             setImapConfig((prev) => ({ ...prev, password: e.target.value }))
                           }
-                          placeholder="App password"
+                          placeholder="App password" className="bg-muted/50"
                         />
                       </div>
                     </div>
-                    <div className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 p-3">
                       <div>
                         <p className="text-sm font-medium">SSL/TLS</p>
                         <p className="text-xs text-muted-foreground">Use secure connection</p>
@@ -1340,62 +1427,62 @@ export function Settings() {
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Host</label>
+                        <Label>Host</Label>
                         <Input
                           value={smtpConfig.host}
                           onChange={(e) =>
                             setSmtpConfig((prev) => ({ ...prev, host: e.target.value }))
                           }
-                          placeholder="smtp.gmail.com"
+                          placeholder="smtp.gmail.com" className="bg-muted/50"
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Port</label>
+                        <Label>Port</Label>
                         <Input
                           value={smtpConfig.port}
                           onChange={(e) =>
                             setSmtpConfig((prev) => ({ ...prev, port: e.target.value }))
                           }
-                          placeholder="587"
+                          placeholder="587" className="bg-muted/50"
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Username</label>
+                        <Label>Username</Label>
                         <Input
                           value={smtpConfig.username}
                           onChange={(e) =>
                             setSmtpConfig((prev) => ({ ...prev, username: e.target.value }))
                           }
-                          placeholder="you@example.com"
+                          placeholder="you@example.com" className="bg-muted/50"
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Password</label>
+                        <Label>Password</Label>
                         <Input
                           type="password"
                           value={smtpConfig.password}
                           onChange={(e) =>
                             setSmtpConfig((prev) => ({ ...prev, password: e.target.value }))
                           }
-                          placeholder="App password"
+                          placeholder="App password" className="bg-muted/50"
                         />
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">From Address</label>
+                      <Label>From Address</Label>
                       <Input
                         type="email"
                         value={smtpConfig.fromAddress}
                         onChange={(e) =>
                           setSmtpConfig((prev) => ({ ...prev, fromAddress: e.target.value }))
                         }
-                        placeholder="noreply@example.com"
+                        placeholder="noreply@example.com" className="bg-muted/50"
                       />
                       <p className="text-xs text-muted-foreground">
                         The email address that outgoing messages are sent from.
                       </p>
                     </div>
-                    <div className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 p-3">
                       <div>
                         <p className="text-sm font-medium">SSL/TLS</p>
                         <p className="text-xs text-muted-foreground">Use secure connection</p>
@@ -1416,7 +1503,7 @@ export function Settings() {
 
             {/* ── Tab 7: Credentials ── */}
             <TabsContent value="credentials" className="mt-0">
-              <Card>
+              <Card className="border-border/60 shadow-soft">
                 <CardHeader>
                   <div className="flex items-center gap-2">
                     <Key className="h-5 w-5 text-primary" />
@@ -1427,18 +1514,52 @@ export function Settings() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* How automated apply with credentials works */}
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+                    <p className="text-sm font-semibold text-foreground">
+                      How credential-based auto-apply works
+                    </p>
+                    <ol className="mt-2 space-y-1.5 text-xs text-muted-foreground list-decimal pl-4">
+                      <li>
+                        Enter your <strong>Indeed</strong> email &amp; password below and click{' '}
+                        <strong>Save</strong>. (Indeed is the portal the agent can currently log into.)
+                      </li>
+                      <li>
+                        Keep <strong>“Show browser window during login”</strong> ON for the first login.
+                      </li>
+                      <li>
+                        Click <strong>Test these credentials</strong> — a Chrome window opens. The agent
+                        types your email/password and auto-reads the email verification code from your
+                        connected mailbox (set that up in <strong>Settings → Email</strong>).
+                      </li>
+                      <li>
+                        If Indeed asks for <strong>phone/device verification</strong>, complete it once
+                        in that window. The trusted session is then saved.
+                      </li>
+                      <li>
+                        After a green “signed in” result, the toggle auto-turns off and future
+                        applies/searches reuse the saved session — no window needed.
+                      </li>
+                    </ol>
+                    <p className="mt-2 text-[11px] text-muted-foreground/70">
+                      Credentials are stored only in your account and used solely to apply on your behalf.
+                    </p>
+                  </div>
+
                   {portalCredentials.length === 0 && (
-                    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-8 text-center">
-                      <Key className="h-8 w-8 text-muted-foreground/40 mb-2" />
-                      <p className="text-sm text-muted-foreground">No portal credentials added yet.</p>
-                      <p className="text-xs text-muted-foreground mt-1">
+                    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border/60 py-10 text-center">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                        <Key className="h-5 w-5" />
+                      </div>
+                      <p className="mt-3 text-sm font-medium text-foreground">No portal credentials added yet</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
                         Click the button below to add your first portal.
                       </p>
                     </div>
                   )}
 
                   {portalCredentials.map((cred, index) => (
-                    <div key={cred.id} className="space-y-3 rounded-lg border p-4">
+                    <div key={cred.id} className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-4">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-muted-foreground">
                           Portal {index + 1}
@@ -1453,43 +1574,86 @@ export function Settings() {
                       </div>
                       <div className="grid gap-3 sm:grid-cols-3">
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted-foreground">
+                          <Label className="text-xs text-muted-foreground">
                             Site Name
-                          </label>
+                          </Label>
                           <Input
                             value={cred.siteName}
                             onChange={(e) =>
                               updatePortalCredential(cred.id, 'siteName', e.target.value)
                             }
-                            placeholder="LinkedIn"
+                            placeholder="LinkedIn" className="bg-muted/50"
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted-foreground">
+                          <Label className="text-xs text-muted-foreground">
                             Username
-                          </label>
+                          </Label>
                           <Input
                             value={cred.username}
                             onChange={(e) =>
                               updatePortalCredential(cred.id, 'username', e.target.value)
                             }
-                            placeholder="you@email.com"
+                            placeholder="you@email.com" className="bg-muted/50"
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted-foreground">
+                          <Label className="text-xs text-muted-foreground">
                             Password
-                          </label>
+                          </Label>
                           <Input
                             type="password"
                             value={cred.password}
                             onChange={(e) =>
                               updatePortalCredential(cred.id, 'password', e.target.value)
                             }
-                            placeholder="Password"
+                            placeholder="Password" className="bg-muted/50"
                           />
                         </div>
                       </div>
+                      {/* Test login — currently supported for Indeed */}
+                      {cred.siteName.toLowerCase().includes('indeed') && (
+                        <div className="space-y-3 rounded-lg border border-border/60 bg-background/50 p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium">Show browser window during login</p>
+                              <p className="text-xs text-muted-foreground">
+                                Recommended for the first login — a visible browser clears Indeed's
+                                bot check far more reliably. The session is then remembered.
+                              </p>
+                            </div>
+                            <Switch checked={indeedHeadful} onCheckedChange={setIndeedHeadful} />
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={testingCredId === cred.id || !cred.username || !cred.password}
+                              onClick={() => handleTestIndeed(cred)}
+                            >
+                              {testingCredId === cred.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Key className="h-4 w-4" />
+                              )}
+                              Test these credentials
+                            </Button>
+                            {credTestResult[cred.id] && (
+                              <span
+                                className={cn(
+                                  'text-xs',
+                                  credTestResult[cred.id]!.ok
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-amber-600 dark:text-amber-400',
+                                )}
+                              >
+                                {credTestResult[cred.id]!.message}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
 
@@ -1512,7 +1676,7 @@ export function Settings() {
 
             {/* ── Tab 8: Danger Zone ── */}
             <TabsContent value="danger" className="mt-0">
-              <Card className="border-destructive/30">
+              <Card className="border-destructive/30 shadow-soft">
                 <CardHeader>
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5 text-destructive" />
@@ -1572,7 +1736,7 @@ export function Settings() {
                   <Separator />
 
                   {/* Export Data */}
-                  <div className="rounded-lg border p-4">
+                  <div className="rounded-lg border border-border/60 p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <h3 className="text-sm font-semibold">Export Data</h3>
@@ -1661,10 +1825,10 @@ export function Settings() {
             <div
               key={toast.id}
               className={cn(
-                'flex items-center gap-3 rounded-lg border px-4 py-3 shadow-lg backdrop-blur-sm max-w-sm animate-in slide-in-from-bottom-2 fade-in duration-300',
+                'flex items-center gap-3 rounded-lg border bg-card/95 px-4 py-3 shadow-lifted backdrop-blur-sm max-w-sm animate-in slide-in-from-bottom-2 fade-in duration-300',
                 toast.type === 'success'
-                  ? 'border-emerald-200 bg-emerald-50/95 text-emerald-800'
-                  : 'border-red-200 bg-red-50/95 text-red-800',
+                  ? 'border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                  : 'border-red-500/30 text-red-700 dark:text-red-300',
               )}
             >
               {toast.type === 'success' ? (

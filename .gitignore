@@ -41,3 +41,10 @@ playwright-report/
 
 # Generated
 *.generated.ts
+*.tsbuildinfo
+
+# Browser automation profiles (contain login sessions / cookies — never commit)
+apps/api/.browser-profiles/
+
+# Crash dumps
+*.stackdump

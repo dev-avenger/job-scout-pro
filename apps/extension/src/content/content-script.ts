@@ -183,9 +183,101 @@ function processFormElement(el: HTMLElement, fields: FormField[]) {
   });
 }
 
+// ---- Autofill (runs in the user's own browser, so anti-bot checks pass) ----
+
+/** Set a value on a React-controlled input so the framework registers it. */
+function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+  setter?.call(el, value);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  el.dispatchEvent(new Event('blur', { bubbles: true }));
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+interface AutofillAnswer {
+  fieldId: string;
+  value: unknown;
+  type?: string;
+}
+
+async function autofillForm(answers: AutofillAnswer[]): Promise<{ filled: number; skipped: string[] }> {
+  let filled = 0;
+  const skipped: string[] = [];
+
+  for (const a of answers) {
+    if (a.value == null || a.value === '' || a.type === 'file') continue;
+    const id = a.fieldId;
+    const value = String(a.value);
+    const esc = (window as any).CSS?.escape ? CSS.escape(id) : id;
+
+    // 1) Workable custom combobox: an input[role=combobox] opening a listbox.
+    const combo = document.querySelector<HTMLElement>(
+      `#input_${esc}_input, [data-ui="${id}"] input[role="combobox"]`,
+    );
+    if (combo) {
+      combo.scrollIntoView({ block: 'center' });
+      combo.click();
+      await sleep(400);
+      const options = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'));
+      const opt =
+        options.find((o) => o.textContent?.trim().toLowerCase() === value.toLowerCase()) ??
+        options.find((o) => o.textContent?.toLowerCase().includes(value.toLowerCase()));
+      if (opt) {
+        opt.click();
+        filled++;
+        await sleep(150);
+        continue;
+      }
+      combo.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      skipped.push(id);
+      continue;
+    }
+
+    // 2) Native <select>
+    const sel = document.querySelector<HTMLSelectElement>(`select[name="${id}"], select#${esc}`);
+    if (sel) {
+      const o = Array.from(sel.options).find(
+        (x) => x.text.toLowerCase() === value.toLowerCase() || x.value.toLowerCase() === value.toLowerCase(),
+      );
+      if (o) {
+        sel.value = o.value;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        filled++;
+        continue;
+      }
+      skipped.push(id);
+      continue;
+    }
+
+    // 3) Plain text / email / tel input or textarea
+    const input = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+      `input[name="${id}"]:not([role="combobox"]), textarea[name="${id}"], #${esc}:not([role="combobox"]), [data-ui="${id}"] input:not([role="combobox"]), [data-ui="${id}"] textarea`,
+    );
+    if (input && (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement)) {
+      if ((input as HTMLInputElement).type === 'file') continue;
+      setNativeValue(input, value);
+      filled++;
+    } else {
+      skipped.push(id);
+    }
+  }
+
+  return { filled, skipped };
+}
+
 // ---- Message Handlers ----
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type === 'AUTOFILL') {
+    autofillForm(message.answers || [])
+      .then((res) => sendResponse({ success: true, ...res }))
+      .catch((err) => sendResponse({ success: false, error: String(err?.message ?? err) }));
+    return true;
+  }
+
   if (message.type === 'CAPTURE_FORM') {
     const result = captureFormFields();
     chrome.runtime.sendMessage({
@@ -218,4 +310,16 @@ if (detectJobPostingPage()) {
       description: document.querySelector('meta[name="description"]')?.getAttribute('content') || '',
     },
   });
+}
+
+// ---- Auto-sync auth token from the web app (so the extension is connected) ----
+
+if (/localhost:5173|127\.0\.0\.1:5173/.test(location.host)) {
+  try {
+    const raw = localStorage.getItem('auth-storage');
+    const token = raw ? JSON.parse(raw)?.state?.accessToken : null;
+    if (token) chrome.runtime.sendMessage({ type: 'SET_AUTH_TOKEN', token });
+  } catch {
+    /* ignore */
+  }
 }

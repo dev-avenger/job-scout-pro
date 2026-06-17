@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import { cn } from '../lib/utils';
@@ -13,6 +13,7 @@ import {
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
 import { apiClient } from '../api/client';
+import { useAuthStore } from '../stores/auth-store';
 import {
   Upload,
   User,
@@ -28,6 +29,7 @@ import {
   Briefcase,
   DollarSign,
   Monitor,
+  Save,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -132,12 +134,12 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
                 className={cn(
                   'flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold transition-all duration-300 border-2',
                   isCompleted &&
-                    'bg-primary border-primary text-primary-foreground shadow-md',
+                    'gradient-primary border-transparent text-primary-foreground shadow-soft',
                   isCurrent &&
-                    'bg-primary border-primary text-primary-foreground shadow-lg shadow-primary/25',
+                    'gradient-primary border-transparent text-primary-foreground shadow-lifted ring-4 ring-primary/15',
                   !isCompleted &&
                     !isCurrent &&
-                    'bg-muted border-muted-foreground/20 text-muted-foreground',
+                    'bg-card border-border text-muted-foreground shadow-soft',
                 )}
               >
                 {isCompleted ? (
@@ -148,10 +150,10 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
               </div>
               <span
                 className={cn(
-                  'mt-2 text-xs font-medium transition-colors duration-300',
-                  isCompleted || isCurrent
-                    ? 'text-primary'
-                    : 'text-muted-foreground',
+                  'mt-2 text-xs font-medium tracking-wide transition-colors duration-300',
+                  isCurrent && 'text-foreground font-semibold',
+                  isCompleted && 'text-primary',
+                  !isCompleted && !isCurrent && 'text-muted-foreground',
                 )}
               >
                 {step.label}
@@ -161,9 +163,7 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
               <div
                 className={cn(
                   'w-10 sm:w-16 h-0.5 mx-2 mb-6 rounded-full transition-colors duration-500',
-                  stepNum < currentStep
-                    ? 'bg-primary'
-                    : 'bg-muted-foreground/20',
+                  stepNum < currentStep ? 'gradient-primary' : 'bg-border',
                 )}
               />
             )}
@@ -267,6 +267,7 @@ function MultiInput({
 
 export function OnboardingWizard() {
   const navigate = useNavigate();
+  const markOnboardingCompleted = useAuthStore((s) => s.markOnboardingCompleted);
 
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -307,6 +308,103 @@ export function OnboardingWizard() {
 
   // Step 5: Autonomy
   const [selectedMode, setSelectedMode] = useState<AutonomyMode | null>(null);
+
+  // Per-step save
+  const [savingProgress, setSavingProgress] = useState(false);
+  const [progressSaved, setProgressSaved] = useState(false);
+
+  // -------------------------------------------------------------------------
+  // Draft persistence — save on any step, restore on return
+  // -------------------------------------------------------------------------
+
+  interface OnboardingDraft {
+    step?: number;
+    profile?: ProfileForm;
+    preferences?: PreferencesForm;
+    credentials?: PortalCredential[];
+    selectedMode?: AutonomyMode | null;
+  }
+
+  useEffect(() => {
+    apiClient
+      .get<{
+        autonomyMode?: AutonomyMode;
+        preferences?: Record<string, any> & { onboardingDraft?: OnboardingDraft | null };
+      }>('/settings')
+      .then(async (data) => {
+        const draft = data.preferences?.onboardingDraft;
+        // An in-progress draft (wizard left mid-way) takes priority — restore it.
+        if (draft) {
+          if (draft.profile) setProfile((prev) => ({ ...prev, ...draft.profile }));
+          if (draft.preferences) setPreferences((prev) => ({ ...prev, ...draft.preferences }));
+          if (draft.credentials?.length) setCredentials(draft.credentials);
+          if (draft.selectedMode) setSelectedMode(draft.selectedMode);
+          if (draft.step && draft.step >= 1 && draft.step <= 5) setStep(draft.step);
+          return;
+        }
+
+        // No draft → pre-fill from saved data so the wizard edits existing
+        // onboarding data instead of starting blank.
+        const prefs = data.preferences ?? {};
+        setPreferences((prev) => ({
+          ...prev,
+          targetRoles: prefs.targetRoles ?? prev.targetRoles,
+          targetLocations: prefs.locations ?? prev.targetLocations,
+          salaryMin: prefs.salaryMin != null ? String(prefs.salaryMin) : prev.salaryMin,
+          salaryMax: prefs.salaryMax != null ? String(prefs.salaryMax) : prev.salaryMax,
+          remotePreference: prefs.remotePreference ?? prev.remotePreference,
+          dailyApplicationCap: prefs.dailyAppCap != null ? String(prefs.dailyAppCap) : prev.dailyApplicationCap,
+        }));
+        if (Array.isArray(prefs.portalCredentials) && prefs.portalCredentials.length) {
+          setCredentials(prefs.portalCredentials);
+        }
+        if (data.autonomyMode) setSelectedMode(data.autonomyMode as AutonomyMode);
+
+        // Pull the default profile for the Step 1 personal/contact fields.
+        try {
+          const profiles = await apiClient.get<any[]>('/profiles');
+          const def = profiles.find((p) => p.isDefault) ?? profiles[0];
+          if (def) {
+            const c = (def.contactInfo ?? {}) as Record<string, string>;
+            setProfile((prev) => ({
+              ...prev,
+              name: def.name ?? c.name ?? prev.name,
+              email: c.email ?? prev.email,
+              phone: c.phone ?? prev.phone,
+              location: c.location ?? prev.location,
+              linkedin: c.linkedin ?? prev.linkedin,
+              summary: def.summary ?? prev.summary,
+              skills: Array.isArray(def.skills) ? def.skills.join(', ') : prev.skills,
+            }));
+          }
+        } catch {
+          // No profile yet — leave Step 1 blank
+        }
+      })
+      .catch(() => {
+        // Request failed — start fresh
+      });
+  }, []);
+
+  const saveProgress = async () => {
+    setSavingProgress(true);
+    setError(null);
+    try {
+      await apiClient.post('/onboarding/progress', {
+        step,
+        profile,
+        preferences,
+        credentials: credentials.filter((c) => c.siteName.trim() || c.username.trim()),
+        selectedMode,
+      });
+      setProgressSaved(true);
+      setTimeout(() => setProgressSaved(false), 2500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save progress');
+    } finally {
+      setSavingProgress(false);
+    }
+  };
 
   // -------------------------------------------------------------------------
   // Dropzone
@@ -399,7 +497,7 @@ export function OnboardingWizard() {
           remotePreference: preferences.remotePreference,
         },
       );
-      setDryRunResults(results);
+      setDryRunResults(Array.isArray(results) ? results : []);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Failed to run dry search',
@@ -488,6 +586,31 @@ export function OnboardingWizard() {
         resumeFile: resumeFile?.name ?? null,
       });
 
+      // The server created an editable default profile from the details above.
+      // If a resume file was uploaded, parse it into that profile to auto-fill
+      // the rest (best-effort).
+      if (resumeFile) {
+        try {
+          const profiles = await apiClient.get<Array<{ id: string; isDefault: boolean }>>('/profiles');
+          const target = profiles.find((p) => p.isDefault) ?? profiles[0];
+          if (target) {
+            const contentBase64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+              reader.onerror = reject;
+              reader.readAsDataURL(resumeFile);
+            });
+            await apiClient.post(`/profiles/${target.id}/import`, {
+              filename: resumeFile.name,
+              contentBase64,
+            });
+          }
+        } catch {
+          // Resume parsing is best-effort — onboarding still completes
+        }
+      }
+
+      markOnboardingCompleted();
       navigate('/');
     } catch (err) {
       setError(
@@ -504,9 +627,9 @@ export function OnboardingWizard() {
 
   function renderProfileStep() {
     return (
-      <Card className="shadow-lg border-0 shadow-black/5">
+      <Card className="border-border/60 shadow-lifted">
         <CardHeader className="text-center pb-2">
-          <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-3">
+          <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 ring-1 ring-primary/15 mb-3">
             <User className="w-6 h-6 text-primary" />
           </div>
           <CardTitle className="text-2xl">Import Your Profile</CardTitle>
@@ -704,9 +827,9 @@ export function OnboardingWizard() {
 
   function renderPreferencesStep() {
     return (
-      <Card className="shadow-lg border-0 shadow-black/5">
+      <Card className="border-border/60 shadow-lifted">
         <CardHeader className="text-center pb-2">
-          <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-3">
+          <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 ring-1 ring-primary/15 mb-3">
             <Settings className="w-6 h-6 text-primary" />
           </div>
           <CardTitle className="text-2xl">Set Your Preferences</CardTitle>
@@ -834,9 +957,9 @@ export function OnboardingWizard() {
 
   function renderDryRunStep() {
     return (
-      <Card className="shadow-lg border-0 shadow-black/5">
+      <Card className="border-border/60 shadow-lifted">
         <CardHeader className="text-center pb-2">
-          <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-3">
+          <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 ring-1 ring-primary/15 mb-3">
             <Eye className="w-6 h-6 text-primary" />
           </div>
           <CardTitle className="text-2xl">Dry Run Preview</CardTitle>
@@ -847,7 +970,7 @@ export function OnboardingWizard() {
         </CardHeader>
         <CardContent className="space-y-5 pt-4">
           {/* Summary of search criteria */}
-          <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
+          <div className="rounded-lg border border-border/60 bg-muted/50 p-4 space-y-3">
             <h4 className="text-sm font-semibold text-foreground">
               Search Criteria
             </h4>
@@ -937,7 +1060,7 @@ export function OnboardingWizard() {
                   {dryRunResults.map((result, idx) => (
                     <div
                       key={idx}
-                      className="flex items-center justify-between rounded-lg border p-3"
+                      className="flex items-center justify-between rounded-lg border border-border/60 bg-card p-3 shadow-soft"
                     >
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-foreground truncate">
@@ -969,9 +1092,9 @@ export function OnboardingWizard() {
 
   function renderCredentialsStep() {
     return (
-      <Card className="shadow-lg border-0 shadow-black/5">
+      <Card className="border-border/60 shadow-lifted">
         <CardHeader className="text-center pb-2">
-          <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-3">
+          <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 ring-1 ring-primary/15 mb-3">
             <Key className="w-6 h-6 text-primary" />
           </div>
           <CardTitle className="text-2xl">Portal Credentials</CardTitle>
@@ -982,7 +1105,7 @@ export function OnboardingWizard() {
         </CardHeader>
         <CardContent className="space-y-5 pt-4">
           {credentials.map((cred, idx) => (
-            <div key={idx} className="rounded-lg border p-4 space-y-3">
+            <div key={idx} className="rounded-lg border border-border/60 bg-muted/30 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-foreground">
                   Portal {idx + 1}
@@ -1060,9 +1183,9 @@ export function OnboardingWizard() {
 
   function renderAutonomyStep() {
     return (
-      <Card className="shadow-lg border-0 shadow-black/5">
+      <Card className="border-border/60 shadow-lifted">
         <CardHeader className="text-center pb-2">
-          <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-3">
+          <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 ring-1 ring-primary/15 mb-3">
             <Shield className="w-6 h-6 text-primary" />
           </div>
           <CardTitle className="text-2xl">Choose Your Autonomy Level</CardTitle>
@@ -1092,10 +1215,10 @@ export function OnboardingWizard() {
                   }
                 }}
                 className={cn(
-                  'cursor-pointer transition-all duration-200 hover:shadow-md',
+                  'cursor-pointer card-hover transition-all duration-200',
                   isSelected
-                    ? 'border-primary bg-primary/5 shadow-md ring-1 ring-primary/20'
-                    : 'hover:border-muted-foreground/30',
+                    ? 'border-primary/60 bg-primary/5 shadow-lifted ring-1 ring-primary/20'
+                    : 'border-border/60 shadow-soft hover:border-primary/30',
                 )}
               >
                 <CardContent className="flex items-start gap-4 p-5">
@@ -1103,7 +1226,7 @@ export function OnboardingWizard() {
                     className={cn(
                       'flex items-center justify-center w-11 h-11 rounded-lg shrink-0 transition-colors duration-200',
                       isSelected
-                        ? 'bg-primary text-primary-foreground'
+                        ? 'gradient-primary text-primary-foreground shadow-soft'
                         : 'bg-muted text-muted-foreground',
                     )}
                   >
@@ -1172,8 +1295,17 @@ export function OnboardingWizard() {
   // -------------------------------------------------------------------------
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/40 flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-2xl">
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-bold tracking-tight">
+            Welcome to <span className="text-gradient">JobScout Pro</span>
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            A few quick steps to set up your job-search agent.
+          </p>
+        </div>
+
         <StepIndicator currentStep={step} />
 
         {error && (
@@ -1202,6 +1334,22 @@ export function OnboardingWizard() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={saveProgress}
+              disabled={savingProgress || loading}
+              title="Save your progress and continue later"
+            >
+              {savingProgress ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : progressSaved ? (
+                <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              {progressSaved ? 'Saved' : 'Save'}
+            </Button>
+
             {OPTIONAL_STEPS.has(step) && step < 5 && (
               <Button variant="ghost" onClick={goNext} disabled={loading}>
                 Skip

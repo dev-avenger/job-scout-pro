@@ -67,6 +67,7 @@ async function loadRecentCaptures() {
 
 // ---- Event Listeners ----
 function setupEventListeners() {
+  document.getElementById('autofillForm')?.addEventListener('click', handleAutofill);
   document.getElementById('saveJob')?.addEventListener('click', handleSaveJob);
   document.getElementById('captureForm')?.addEventListener('click', handleCaptureForm);
   document.getElementById('openDashboard')?.addEventListener('click', handleOpenDashboard);
@@ -121,6 +122,36 @@ async function handleCaptureForm() {
       statusEl.className = 'status error';
     }
     setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'status'; }, 3000);
+  });
+}
+
+async function handleAutofill() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id || !tab.url) return;
+
+  const statusEl = document.getElementById('status')!;
+  statusEl.textContent = 'Fetching your prepared answers…';
+  statusEl.className = 'status info';
+
+  // 1) Get the matching application's answers from the API.
+  const res = await sendMessage({ type: 'FETCH_AUTOFILL', url: tab.url });
+  if (!res?.success || !res.data) {
+    statusEl.textContent = 'No matching prepared application for this page.';
+    statusEl.className = 'status error';
+    setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'status'; }, 4000);
+    return;
+  }
+
+  // 2) Tell the content script to fill the form in THIS (the user's) browser.
+  chrome.tabs.sendMessage(tab.id, { type: 'AUTOFILL', answers: res.data.answers }, (fill) => {
+    if (fill?.success) {
+      statusEl.innerHTML = `Filled ${fill.filled} fields. <b>Attach your resume, solve the human check, and submit.</b>`;
+      statusEl.className = 'status success';
+    } else {
+      statusEl.textContent = fill?.error || 'Could not fill the form on this page.';
+      statusEl.className = 'status error';
+    }
+    setTimeout(() => { statusEl.className = 'status'; }, 8000);
   });
 }
 

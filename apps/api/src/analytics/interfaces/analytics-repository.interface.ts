@@ -7,4 +7,9 @@ export interface IAnalyticsRepository {
   getTotalSpend(userId: string): Promise<number>;
   getRecentLlmRequests(userId: string, limit?: number): Promise<unknown[]>;
   getRecentAgentLogs(userId: string, limit?: number): Promise<unknown[]>;
+  getResponseRate(userId: string, days: number): Promise<{ date: string; rate: number }[]>;
+  getSourceEffectiveness(
+    userId: string,
+  ): Promise<{ source: string; applications: number; interviews: number; offers: number }[]>;
+  getCostTrends(userId: string, days: number): Promise<{ date: string; costCents: number }[]>;
 }

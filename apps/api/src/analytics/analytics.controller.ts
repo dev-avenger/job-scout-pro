@@ -25,6 +25,23 @@ export class AnalyticsController {
     return this.analyticsService.getVolume(user.sub, numDays);
   }
 
+  @Get('analytics/response-rate')
+  async getResponseRate(@CurrentUser() user: JwtPayload, @Query('days') days?: string) {
+    const numDays = Math.min(Math.max(parseInt(days || '30', 10) || 30, 1), 365);
+    return this.analyticsService.getResponseRate(user.sub, numDays);
+  }
+
+  @Get('analytics/source-effectiveness')
+  async getSourceEffectiveness(@CurrentUser() user: JwtPayload) {
+    return this.analyticsService.getSourceEffectiveness(user.sub);
+  }
+
+  @Get('analytics/cost-trends')
+  async getCostTrends(@CurrentUser() user: JwtPayload, @Query('days') days?: string) {
+    const numDays = Math.min(Math.max(parseInt(days || '30', 10) || 30, 1), 365);
+    return this.analyticsService.getCostTrends(user.sub, numDays);
+  }
+
   @Get('monitoring/llm/spend')
   async getLlmSpend(@CurrentUser() user: JwtPayload) {
     return this.analyticsService.getLlmSpend(user.sub);

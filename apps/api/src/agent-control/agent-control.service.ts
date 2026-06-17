@@ -36,4 +36,37 @@ export class AgentControlService implements IAgentControlService {
       message: 'All agent activity halted. Active applications will be withdrawn where possible.',
     };
   }
+
+  async getQueueStats(_userId: string) {
+    const queueNames = [
+      'job-search',
+      'job-validation',
+      'application',
+      'outreach',
+      'inbox-scan',
+      'research',
+      'follow-up',
+      'maintenance',
+    ];
+
+    const stats: Record<
+      string,
+      { waiting: number; active: number; completed: number; failed: number }
+    > = {};
+
+    await Promise.all(
+      queueNames.map(async (name) => {
+        const [wait, paused, active, completed, failed] = await Promise.all([
+          this.redis.llen(`bull:${name}:wait`),
+          this.redis.llen(`bull:${name}:paused`),
+          this.redis.llen(`bull:${name}:active`),
+          this.redis.zcard(`bull:${name}:completed`),
+          this.redis.zcard(`bull:${name}:failed`),
+        ]);
+        stats[name] = { waiting: wait + paused, active, completed, failed };
+      }),
+    );
+
+    return stats;
+  }
 }

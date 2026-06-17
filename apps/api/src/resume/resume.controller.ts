@@ -13,6 +13,7 @@ import type { ResumeData } from './export/pdf-generator.js';
 import { getTemplateConfig } from './export/template-registry.js';
 import { ResumeTailorAgent } from './agents/resume-tailor.agent.js';
 import { CoverLetterAgent } from './agents/cover-letter.agent.js';
+import { ResumeExtractorAgent } from './agents/resume-extractor.agent.js';
 import { AtsScorer } from './ats-scorer.js';
 import type { LayoutType, ThemeType } from '@auto-job-apply/shared-types';
 import { TemplateConfigSchema, BuilderLayoutStateSchema, BuilderLayoutStateV2Schema, migrateLayoutState, legacyPlacementFromLayout } from '@auto-job-apply/shared-types';
@@ -158,6 +159,28 @@ const sectionSchemas: Record<string, z.ZodSchema> = {
   }).passthrough(),
 };
 
+/**
+ * Remove characters PostgreSQL's JSONB cannot store. NUL is illegal in
+ * jsonb; other C0 control chars (except tab/newline/carriage-return) are stripped
+ * too since they have no place in extracted resume text.
+ */
+function stripControlChars(value: string): string {
+  // eslint-disable-next-line no-control-regex
+  return value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+}
+
+/** Recursively strip control chars from every string in an object/array. */
+function sanitizeForJsonb(value: unknown): unknown {
+  if (typeof value === 'string') return stripControlChars(value);
+  if (Array.isArray(value)) return value.map(sanitizeForJsonb);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, sanitizeForJsonb(v)]),
+    );
+  }
+  return value;
+}
+
 @Controller('api/v1')
 @UseGuards(JwtAuthGuard)
 export class ResumeController {
@@ -168,6 +191,7 @@ export class ResumeController {
     private readonly docxGenerator: DocxGenerator,
     private readonly resumeTailorAgent: ResumeTailorAgent,
     private readonly coverLetterAgent: CoverLetterAgent,
+    private readonly resumeExtractorAgent: ResumeExtractorAgent,
     private readonly atsScorer: AtsScorer,
   ) {}
 
@@ -529,35 +553,100 @@ export class ResumeController {
     } catch (err) {
       throw new BadRequestException(err instanceof Error ? err.message : 'Could not parse file');
     }
+    // PDF text extraction often yields NUL ( ) and other C0 control chars,
+    // which PostgreSQL's JSONB rejects ("unsupported Unicode escape sequence").
+    text = stripControlChars(text);
+
+    // Heuristic parse first (always available, free) — used as the fallback and
+    // to backfill anything the LLM omits (contact regexes are very reliable).
     const parsed = parseResumeText(text);
 
+    // LLM extraction for the structured sections (experience, education, …)
+    // that the line-based heuristic can't reliably parse. Best-effort: if the
+    // LLM is unavailable we still import contact/summary/skills heuristically.
+    const llm = await this.resumeExtractorAgent.extract(text, { userId: user.sub, profileId: id });
+    const ai = llm.data ?? {};
+
+    const existing = profile as Record<string, any>;
     const update: Record<string, unknown> = {
       rawImport: { filename: body.filename, text: parsed.rawText, importedAt: new Date().toISOString() },
     };
-    const existing = profile as Record<string, any>;
+
+    // Contact info: keep anything already set; otherwise prefer LLM, then regex.
     const existingContact = (existing.contactInfo ?? {}) as Record<string, unknown>;
+    const aiContact = (ai.contactInfo ?? {}) as Record<string, unknown>;
+    const pickContact = (key: string, heuristic?: string) =>
+      existingContact[key] || aiContact[key] || heuristic
+        ? { [key]: existingContact[key] || aiContact[key] || heuristic }
+        : {};
+    // The candidate's real name — used to fill firstname/lastname on forms.
+    // (Distinct from the profile's label like "Fullstack Developer".)
+    const extractedName = (ai.name || parsed.name || '').trim();
     update.contactInfo = {
       ...existingContact,
-      ...(parsed.contactInfo.email && !existingContact.email ? { email: parsed.contactInfo.email } : {}),
-      ...(parsed.contactInfo.phone && !existingContact.phone ? { phone: parsed.contactInfo.phone } : {}),
-      ...(parsed.contactInfo.linkedin && !existingContact.linkedin ? { linkedin: parsed.contactInfo.linkedin } : {}),
-      ...(parsed.contactInfo.github && !existingContact.github ? { github: parsed.contactInfo.github } : {}),
+      ...(extractedName && !existingContact.name ? { name: extractedName } : {}),
+      ...pickContact('email', parsed.contactInfo.email),
+      ...pickContact('phone', parsed.contactInfo.phone),
+      ...pickContact('location'),
+      ...pickContact('linkedin', parsed.contactInfo.linkedin),
+      ...pickContact('github', parsed.contactInfo.github),
+      ...(aiContact.website ? { website: aiContact.website } : {}),
     };
-    if (parsed.summary && !existing.summary) update.summary = parsed.summary;
-    if (parsed.skills.length > 0 && !(existing.skills as unknown[] | undefined)?.length) {
-      update.skills = parsed.skills;
+    // If the profile still has a placeholder/label name and the resume gave a
+    // real one, adopt it as the profile name too.
+    if (extractedName && (!existing.name || /developer|engineer|profile|resume/i.test(String(existing.name)))) {
+      update.name = extractedName.slice(0, 100);
     }
 
-    await this.resumeService.updateProfile(user.sub, id, update);
+    // Scalar/summary + skills: only fill if the profile doesn't already have them.
+    const summary = ai.summary || parsed.summary;
+    if (summary && !existing.summary) update.summary = summary;
+
+    const skills = (ai.skills?.length ? ai.skills : parsed.skills) ?? [];
+    if (skills.length > 0 && !(existing.skills as unknown[] | undefined)?.length) {
+      update.skills = skills;
+    }
+
+    // Structured sections — only LLM can produce these. Fill if empty on profile.
+    const fillSection = (key: string, items?: unknown[]) => {
+      if (items?.length && !(existing[key] as unknown[] | undefined)?.length) {
+        update[key] = items;
+      }
+    };
+    fillSection('experience', ai.experience);
+    fillSection('education', ai.education);
+    fillSection('projects', ai.projects);
+    fillSection('certifications', ai.certifications);
+    fillSection('languages', ai.languages);
+    fillSection('publications', ai.publications);
+    fillSection('volunteer', ai.volunteer);
+    fillSection('references', ai.references);
+
+    // Final guard: strip control chars from every string in the payload so the
+    // JSONB write can never fail on a stray NUL from the file or the LLM.
+    await this.resumeService.updateProfile(user.sub, id, sanitizeForJsonb(update) as Record<string, unknown>);
 
     return {
       imported: true,
       textLength: parsed.rawText.length,
+      usedLlm: Boolean(llm.data),
+      costCents: llm.data ? llm.costCents : 0,
+      // Surfaced to the UI so the user knows why structured sections may be empty
+      // (e.g. "Gemini quota exceeded — add billing or switch provider").
+      llmError: llm.error,
       extracted: {
-        name: parsed.name,
-        contactInfo: parsed.contactInfo,
-        summary: Boolean(parsed.summary),
-        skills: parsed.skills.length,
+        name: ai.name || parsed.name,
+        contactInfo: update.contactInfo,
+        summary: Boolean(update.summary ?? existing.summary),
+        skills: (update.skills as unknown[] | undefined)?.length ?? (existing.skills as unknown[] | undefined)?.length ?? 0,
+        experience: (update.experience as unknown[] | undefined)?.length ?? (existing.experience as unknown[] | undefined)?.length ?? 0,
+        education: (update.education as unknown[] | undefined)?.length ?? (existing.education as unknown[] | undefined)?.length ?? 0,
+        projects: (update.projects as unknown[] | undefined)?.length ?? 0,
+        certifications: (update.certifications as unknown[] | undefined)?.length ?? 0,
+        languages: (update.languages as unknown[] | undefined)?.length ?? 0,
+        publications: (update.publications as unknown[] | undefined)?.length ?? 0,
+        volunteer: (update.volunteer as unknown[] | undefined)?.length ?? 0,
+        references: (update.references as unknown[] | undefined)?.length ?? 0,
       },
     };
   }

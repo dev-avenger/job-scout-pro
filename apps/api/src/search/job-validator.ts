@@ -37,6 +37,20 @@ export class JobValidator {
       return { isValid: false, status: 'valid', reason: 'Job title too short' };
     }
 
+    // Liveness gate: ATS APIs sometimes keep serving postings whose public
+    // page is already closed (404/410). Only definitive "gone" statuses fail —
+    // bot-blocks (403) and transient errors get the benefit of the doubt.
+    if (rawJob.sourceUrl) {
+      const accessible = await this.isUrlAccessible(rawJob.sourceUrl);
+      if (!accessible) {
+        return {
+          isValid: false,
+          status: 'expired',
+          reason: 'Job posting page is no longer accessible (closed or removed)',
+        };
+      }
+    }
+
     // Scam detection via LLM (only if context provided and description available)
     if (context && rawJob.description && this.scamDetector) {
       try {
@@ -58,5 +72,30 @@ export class JobValidator {
     }
 
     return { isValid: true, status: 'valid' };
+  }
+
+  private async isUrlAccessible(url: string): Promise<boolean> {
+    const headers = {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+    };
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      let response = await fetch(url, { method: 'HEAD', headers, signal: controller.signal });
+      // Some servers reject HEAD — retry once with GET
+      if (response.status === 405 || response.status === 501) {
+        response = await fetch(url, { method: 'GET', headers, signal: controller.signal });
+      }
+      clearTimeout(timer);
+      if (response.status === 404 || response.status === 410) {
+        logger.info({ url, status: response.status }, 'Job URL no longer accessible');
+        return false;
+      }
+      return true;
+    } catch {
+      // Network hiccups should not drop otherwise-valid jobs
+      return true;
+    }
   }
 }
