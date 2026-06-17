@@ -120,6 +120,105 @@ export function PageSetupPanel() {
             </SelectContent>
           </Select>
         </div>
+
+        {/* ---- Spacing & typography (live design controls) ---- */}
+        <div className="space-y-1.5 border-t pt-3">
+          <Label className="text-xs">Page margin: {templateConfig.spacing.marginPt}pt</Label>
+          <Slider
+            min={24}
+            max={80}
+            step={2}
+            value={[templateConfig.spacing.marginPt]}
+            onValueChange={([v]) =>
+              updateTemplateConfig({ spacing: { ...templateConfig.spacing, marginPt: v! } })
+            }
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Section gap: {templateConfig.spacing.sectionGapPt}pt</Label>
+          <Slider
+            min={4}
+            max={24}
+            step={1}
+            value={[templateConfig.spacing.sectionGapPt]}
+            onValueChange={([v]) =>
+              updateTemplateConfig({ spacing: { ...templateConfig.spacing, sectionGapPt: v! } })
+            }
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Entry gap: {templateConfig.spacing.entryGapPt}pt</Label>
+          <Slider
+            min={2}
+            max={16}
+            step={1}
+            value={[templateConfig.spacing.entryGapPt]}
+            onValueChange={([v]) =>
+              updateTemplateConfig({ spacing: { ...templateConfig.spacing, entryGapPt: v! } })
+            }
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Body text size: {templateConfig.typography.bodySizePt}pt</Label>
+          <Slider
+            min={8}
+            max={12}
+            step={0.5}
+            value={[templateConfig.typography.bodySizePt]}
+            onValueChange={([v]) =>
+              updateTemplateConfig({ typography: { ...templateConfig.typography, bodySizePt: v! } })
+            }
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Name size: {templateConfig.typography.nameSizePt}pt</Label>
+          <Slider
+            min={14}
+            max={34}
+            step={1}
+            value={[templateConfig.typography.nameSizePt]}
+            onValueChange={([v]) =>
+              updateTemplateConfig({ typography: { ...templateConfig.typography, nameSizePt: v! } })
+            }
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Font family</Label>
+          <Select
+            value={
+              /serif/i.test(templateConfig.typography.bodyFont)
+                ? 'serif'
+                : /mono/i.test(templateConfig.typography.bodyFont)
+                  ? 'mono'
+                  : 'sans'
+            }
+            onValueChange={(v) => {
+              const font =
+                v === 'serif'
+                  ? "Georgia, 'Times New Roman', serif"
+                  : v === 'mono'
+                    ? "'JetBrains Mono', 'Courier New', monospace"
+                    : "'Helvetica Neue', Helvetica, Arial, sans-serif";
+              updateTemplateConfig({
+                typography: { ...templateConfig.typography, headingFont: font, bodyFont: font },
+              });
+            }}
+          >
+            <SelectTrigger className="h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="sans">Sans-serif (Helvetica)</SelectItem>
+              <SelectItem value="serif">Serif (Georgia)</SelectItem>
+              <SelectItem value="mono">Monospace</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </CardContent>
     </Card>
   );
