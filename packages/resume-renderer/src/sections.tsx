@@ -2,6 +2,7 @@ import type { CSSProperties, FocusEvent, ReactNode } from 'react';
 import type { CustomSection, TemplateConfig } from '@auto-job-apply/shared-types';
 import { SECTION_LABELS, isCustomSectionId, customSectionUuid } from '@auto-job-apply/shared-types';
 import type { ResumeRenderData } from './types.js';
+import { formatDate, formatDateRange, formatComposedRange } from './dates.js';
 
 export interface SectionRenderContext {
   data: ResumeRenderData;
@@ -199,12 +200,6 @@ function SkillsSection(ctx: SectionRenderContext) {
   );
 }
 
-function dateRange(start?: string, end?: string, current?: boolean): string {
-  if (!start && !end) return '';
-  if (current || !end) return `${start ?? ''} - Present`;
-  return `${start ?? ''} - ${end}`;
-}
-
 function ExperienceSection(ctx: SectionRenderContext) {
   const { data, config } = ctx;
   if (!data.experience.length) return null;
@@ -243,7 +238,7 @@ function ExperienceSection(ctx: SectionRenderContext) {
             <div style={gutterStyle}>
               {i === 0 && <h3 style={labelLeftTitle(config)}>Work Experience</h3>}
               <p style={{ ...muted(config), fontSize: '9pt' }}>
-                {dateRange(exp.startDate, exp.endDate, exp.current)}
+                {formatDateRange(exp.startDate, exp.endDate, exp.current, config.dateFormat)}
               </p>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -263,7 +258,7 @@ function ExperienceSection(ctx: SectionRenderContext) {
         <div key={i} style={entryGap(config)}>
           <EditableText path={`experience.${i}.title`} value={exp.title} style={heading(config)} ctx={ctx} />
           <p style={muted(config)}>
-            {[exp.company, exp.location, dateRange(exp.startDate, exp.endDate, exp.current)]
+            {[exp.company, exp.location, formatDateRange(exp.startDate, exp.endDate, exp.current, config.dateFormat)]
               .filter(Boolean)
               .join(' | ')}
           </p>
@@ -299,7 +294,11 @@ function EducationSection(ctx: SectionRenderContext) {
           <div key={i} style={{ display: 'flex', ...entryGap(config) }}>
             <div style={gutterStyle}>
               {i === 0 && <h3 style={labelLeftTitle(config)}>Education and Training</h3>}
-              {edu.date && <p style={{ ...muted(config), fontSize: '9pt' }}>{edu.date}</p>}
+              {edu.date && (
+                <p style={{ ...muted(config), fontSize: '9pt' }}>
+                  {formatComposedRange(edu.date, config.dateFormat)}
+                </p>
+              )}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               {degreeLine(edu, i)}
@@ -321,7 +320,7 @@ function EducationSection(ctx: SectionRenderContext) {
         <div key={i} style={entryGap(config)}>
           {degreeLine(edu, i)}
           <p style={muted(config)}>
-            {[edu.institution, edu.location, edu.date, edu.gpa ? `GPA: ${edu.gpa}` : undefined]
+            {[edu.institution, edu.location, formatComposedRange(edu.date, config.dateFormat), edu.gpa ? `GPA: ${edu.gpa}` : undefined]
               .filter(Boolean)
               .join(' | ')}
           </p>
@@ -363,7 +362,7 @@ function CertificationsSection(ctx: SectionRenderContext) {
     <Section title="Certifications" ctx={ctx}>
       {data.certifications.map((cert, i) => (
         <p key={i} style={{ ...body(config), breakInside: 'avoid' }}>
-          {[cert.name, cert.issuer, cert.date].filter(Boolean).join(' - ')}
+          {[cert.name, cert.issuer, formatDate(cert.date, config.dateFormat)].filter(Boolean).join(' - ')}
         </p>
       ))}
     </Section>
@@ -399,7 +398,7 @@ function PublicationsSection(ctx: SectionRenderContext) {
     <Section title="Publications" ctx={ctx}>
       {data.publications.map((pub, i) => (
         <p key={i} style={{ ...body(config), breakInside: 'avoid' }}>
-          {[pub.title, pub.venue, pub.date].filter(Boolean).join(' - ')}
+          {[pub.title, pub.venue, formatDate(pub.date, config.dateFormat)].filter(Boolean).join(' - ')}
         </p>
       ))}
     </Section>
