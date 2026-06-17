@@ -34,6 +34,7 @@ import {
   Moon,
   UserCog,
   ChevronsUpDown,
+  Inbox as InboxIcon,
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { apiClient } from '../api/client';
@@ -51,6 +52,7 @@ const navigation = [
     items: [
       { name: 'Jobs', path: '/jobs/queue', icon: Briefcase },
       { name: 'Applications', path: '/applications', icon: FileText },
+      { name: 'Inbox', path: '/inbox', icon: InboxIcon },
       { name: 'Interviews', path: '/interviews', icon: UserCheck },
     ],
   },

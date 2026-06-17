@@ -21,6 +21,7 @@ const Networking = lazy(() => import('./pages/Networking').then(m => ({ default:
 const Monitoring = lazy(() => import('./pages/Monitoring').then(m => ({ default: m.Monitoring })));
 const AiUsage = lazy(() => import('./pages/AiUsage').then(m => ({ default: m.AiUsage })));
 const Notifications = lazy(() => import('./pages/Notifications').then(m => ({ default: m.Notifications })));
+const Inbox = lazy(() => import('./pages/Inbox').then(m => ({ default: m.Inbox })));
 const CaptchaQueue = lazy(() => import('./pages/CaptchaQueue').then(m => ({ default: m.CaptchaQueue })));
 const ApplicationDetail = lazy(() => import('./pages/ApplicationDetail').then(m => ({ default: m.ApplicationDetail })));
 const BuilderPage = lazy(() => import('./pages/BuilderPage').then(m => ({ default: m.BuilderPage })));
@@ -62,6 +63,7 @@ export function App() {
           <Route path="/monitoring" element={<Monitoring />} />
           <Route path="/ai-usage" element={<AiUsage />} />
           <Route path="/notifications" element={<Notifications />} />
+          <Route path="/inbox" element={<Inbox />} />
           <Route path="/captcha-queue" element={<CaptchaQueue />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

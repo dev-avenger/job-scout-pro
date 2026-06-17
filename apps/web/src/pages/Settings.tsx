@@ -167,7 +167,7 @@ const LLM_PROVIDERS: { value: LlmProvider; label: string }[] = [
 const MODELS_BY_PROVIDER: Record<LlmProvider, string[]> = {
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
   anthropic: ['claude-sonnet-4-20250514', 'claude-haiku-4-20250414', 'claude-3-5-sonnet-20241022'],
-  gemini: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro'],
+  gemini: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'],
   ollama: ['llama3', 'llama3:70b', 'mistral', 'mixtral', 'codellama', 'phi3'],
   custom: ['custom'],
 };
