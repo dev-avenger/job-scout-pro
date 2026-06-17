@@ -38,6 +38,8 @@ export const savedAnswers = pgTable('saved_answers', {
   fieldType: varchar('field_type', { length: 50 }),
   answerText: text('answer_text').notNull(),
   source: varchar('source', { length: 30 }),
+  /** Embedding of fieldLabel for semantic dedup of similar questions. */
+  questionEmbedding: jsonb('question_embedding'),
   timesUsed: integer('times_used').default(0).notNull(),
   lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

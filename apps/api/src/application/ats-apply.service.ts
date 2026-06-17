@@ -323,13 +323,25 @@ export class AtsApplyService {
         }
         continue;
       }
-      // 2. answer bank (free)
+      // 2. answer bank — exact label (free)
       const saved = await this.answerBank.findByLabel(userId, field.label);
       if (saved) {
         await this.answerBank.incrementUsage(saved.id);
         answers.push({
           ...this.base(field),
           value: this.snapToOption(field, saved.answerText),
+          source: 'saved_answer',
+        });
+        continue;
+      }
+      // 2b. answer bank — semantic match of a similar past question (free reuse;
+      // only an embedding call, far cheaper than generating a fresh answer)
+      const similar = await this.answerBank.findSemantic(userId, field.label);
+      if (similar) {
+        await this.answerBank.incrementUsage(similar.id);
+        answers.push({
+          ...this.base(field),
+          value: this.snapToOption(field, similar.answerText),
           source: 'saved_answer',
         });
         continue;
