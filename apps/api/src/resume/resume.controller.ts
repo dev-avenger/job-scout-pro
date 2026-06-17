@@ -15,6 +15,7 @@ import { ResumeTailorAgent } from './agents/resume-tailor.agent.js';
 import { CoverLetterAgent } from './agents/cover-letter.agent.js';
 import { ResumeExtractorAgent } from './agents/resume-extractor.agent.js';
 import { AtsAnalysisAgent } from './agents/ats-analysis.agent.js';
+import { JobTailorAgent } from './agents/job-tailor.agent.js';
 import { AtsScorer } from './ats-scorer.js';
 import type { LayoutType, ThemeType } from '@auto-job-apply/shared-types';
 import { TemplateConfigSchema, BuilderLayoutStateSchema, BuilderLayoutStateV2Schema, migrateLayoutState, legacyPlacementFromLayout } from '@auto-job-apply/shared-types';
@@ -195,6 +196,7 @@ export class ResumeController {
     private readonly resumeExtractorAgent: ResumeExtractorAgent,
     private readonly atsScorer: AtsScorer,
     private readonly atsAnalysisAgent: AtsAnalysisAgent,
+    private readonly jobTailorAgent: JobTailorAgent,
   ) {}
 
   /* ======================================================================== */
@@ -422,6 +424,28 @@ export class ResumeController {
       }
     }
     return heuristic;
+  }
+
+  /**
+   * Unified job→resume tailoring: one LLM pass that parses the JD and returns a
+   * tailored summary, rewritten experience, reprioritized skills, sections to
+   * hide for this role, and a cover-letter outline.
+   */
+  @Post('profiles/:profileId/tailor-for-job')
+  async tailorForJob(
+    @CurrentUser() user: JwtPayload,
+    @Param('profileId') profileId: string,
+    @Body() body: { jobDescription: string; jobTitle?: string; companyName?: string },
+  ) {
+    if (!body?.jobDescription) throw new BadRequestException('jobDescription is required');
+    const profile = (await this.resumeService.getProfile(user.sub, profileId)) as Record<string, unknown>;
+    const { result, costCents } = await this.jobTailorAgent.tailorForJob(
+      profile,
+      body.jobDescription,
+      { userId: user.sub },
+      { jobTitle: body.jobTitle, companyName: body.companyName },
+    );
+    return { ...result, llmCostCents: costCents };
   }
 
   /* ======================================================================== */
