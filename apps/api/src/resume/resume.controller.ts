@@ -448,6 +448,48 @@ export class ResumeController {
     return { ...result, llmCostCents: costCents };
   }
 
+  /**
+   * Capstone "Tailor & Apply" engine: in one call, tailor the resume to the job
+   * (JobTailorAgent) AND produce a deep ATS read (AtsAnalysisAgent + heuristic),
+   * run in parallel. The UI uses this to show the tailored diff alongside the
+   * match score before the user applies. Analysis degrades gracefully if the LLM
+   * is unavailable; tailoring is the required half.
+   */
+  @Post('profiles/:profileId/tailor-and-score')
+  async tailorAndScore(
+    @CurrentUser() user: JwtPayload,
+    @Param('profileId') profileId: string,
+    @Body() body: { jobDescription: string; jobTitle?: string; companyName?: string },
+  ) {
+    if (!body?.jobDescription) throw new BadRequestException('jobDescription is required');
+    const profile = (await this.resumeService.getProfile(user.sub, profileId)) as Record<string, unknown>;
+    const context = { userId: user.sub };
+
+    const heuristic = this.atsScorer.score(profile, body.jobDescription);
+
+    const [tailorRes, analysisRes] = await Promise.allSettled([
+      this.jobTailorAgent.tailorForJob(profile, body.jobDescription, context, {
+        jobTitle: body.jobTitle,
+        companyName: body.companyName,
+      }),
+      this.atsAnalysisAgent.analyze(profile, body.jobDescription, context),
+    ]);
+
+    if (tailorRes.status === 'rejected') {
+      throw new BadRequestException('Tailoring failed — please try again.');
+    }
+
+    const tailorCost = tailorRes.value.costCents;
+    const analysis = analysisRes.status === 'fulfilled' ? analysisRes.value.analysis : null;
+    const analysisCost = analysisRes.status === 'fulfilled' ? analysisRes.value.costCents : 0;
+
+    return {
+      tailored: tailorRes.value.result,
+      score: { ...heuristic, analysis },
+      llmCostCents: tailorCost + analysisCost,
+    };
+  }
+
   /* ======================================================================== */
   /*  ATS Scoring (standalone)                                                */
   /* ======================================================================== */
