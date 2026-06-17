@@ -27,6 +27,7 @@ import { resolveDrop } from '../lib/builder-dnd';
 import { LIBRARY_DRAG_PREFIX, SectionLibrary } from '../components/resume/builder/SectionLibrary';
 import { PageSetupPanel } from '../components/resume/builder/PageSetupPanel';
 import { TemplatesPanel } from '../components/resume/builder/TemplatesPanel';
+import { TailorForJobPanel } from '../components/resume/builder/TailorForJobPanel';
 import { TemplateGallery } from '../components/resume/TemplateGallery';
 import { ThemeCustomizer } from '../components/resume/ThemeCustomizer';
 import { CustomSectionEditor } from '../components/resume/CustomSectionEditor';
@@ -374,6 +375,9 @@ export function BuilderPage() {
                 <TabsTrigger value="templates" className="flex-1">
                   Templates
                 </TabsTrigger>
+                <TabsTrigger value="tailor" className="flex-1">
+                  Tailor
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="design" className="space-y-3 pt-3">
                 <TemplateGallery />
@@ -384,6 +388,9 @@ export function BuilderPage() {
               </TabsContent>
               <TabsContent value="templates" className="pt-3">
                 <TemplatesPanel />
+              </TabsContent>
+              <TabsContent value="tailor" className="pt-3">
+                {profileId && <TailorForJobPanel profileId={profileId} />}
               </TabsContent>
             </Tabs>
           </aside>
