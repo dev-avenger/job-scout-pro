@@ -268,11 +268,71 @@ async function autofillForm(answers: AutofillAnswer[]): Promise<{ filled: number
   return { filled, skipped };
 }
 
+/**
+ * Fill a Workable repeatable "group" section (Education / Experience). Each
+ * entry: click the section's "+ Add" to open an editor, fill its sub-fields
+ * (scoped to that editor — sub-field ids/names repeat across sections), then
+ * click "Update" to commit. Keys of each entry object match the input names
+ * (school/degree/title/company/start_date/end_date/summary/current/…).
+ */
+async function fillWorkableGroup(
+  sectionUi: 'education' | 'experience',
+  entries: Array<Record<string, unknown>>,
+): Promise<number> {
+  const container = document.querySelector<HTMLElement>(`[data-ui="${sectionUi}"]`);
+  if (!container || !Array.isArray(entries) || entries.length === 0) return 0;
+  let added = 0;
+
+  for (const entry of entries) {
+    // Open a fresh editor for this entry if one isn't already open.
+    let editor = container.querySelector<HTMLElement>('[data-ui="editor"]');
+    if (!editor) {
+      const addBtn = container.querySelector<HTMLButtonElement>('button[data-ui="add-section"]');
+      if (!addBtn || addBtn.disabled) break;
+      addBtn.scrollIntoView({ block: 'center' });
+      addBtn.click();
+      await sleep(450);
+      editor = container.querySelector<HTMLElement>('[data-ui="editor"]');
+    }
+    if (!editor) break;
+
+    for (const [name, raw] of Object.entries(entry)) {
+      if (raw == null || raw === '') continue;
+      if (name === 'current') {
+        // custom checkbox: div[role=checkbox]#current; click only to turn ON
+        const cb = editor.querySelector<HTMLElement>('#current[role="checkbox"]');
+        if (raw === true && cb && cb.getAttribute('aria-checked') !== 'true') cb.click();
+        continue;
+      }
+      const el = editor.querySelector<HTMLElement>(`[name="${name}"]`);
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        setNativeValue(el, String(raw));
+      }
+    }
+
+    // Commit the entry ("Update"); the "+ Add" button re-enables afterward.
+    const save = editor.querySelector<HTMLButtonElement>('button[data-ui="save-section"]');
+    if (save) {
+      save.click();
+      await sleep(550);
+    }
+    added++;
+  }
+
+  return added;
+}
+
 // ---- Message Handlers ----
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'AUTOFILL') {
-    autofillForm(message.answers || [])
+    (async () => {
+      const res = await autofillForm(message.answers || []);
+      // Repeatable Education/Experience group sections (e.g. Workable).
+      const eduAdded = await fillWorkableGroup('education', message.education || []);
+      const expAdded = await fillWorkableGroup('experience', message.experience || []);
+      return { ...res, filled: res.filled + eduAdded + expAdded, groupsAdded: eduAdded + expAdded };
+    })()
       .then((res) => sendResponse({ success: true, ...res }))
       .catch((err) => sendResponse({ success: false, error: String(err?.message ?? err) }));
     return true;

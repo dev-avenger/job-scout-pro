@@ -97,6 +97,8 @@ export class ApplicationService implements IApplicationService {
   async getAutofill(userId: string, pageUrl: string): Promise<{
     applicationId: string;
     answers: Array<{ fieldId: string; label?: string; value: unknown; type?: string }>;
+    education: Array<Record<string, string>>;
+    experience: Array<Record<string, string | boolean>>;
     resumeUrl: string;
     resumeFilename: string;
   } | null> {
@@ -117,12 +119,55 @@ export class ApplicationService implements IApplicationService {
     if (!match) return null;
 
     const fa = (match.formAnswers as { answers?: any[] } | null) ?? {};
+
+    // Structured education/experience for ATS forms that have repeatable
+    // "group" sections (e.g. Workable). Keys match the sub-field input names.
+    const profile = (await this.repo.getDefaultProfile(userId)) as Record<string, any> | null;
+    const edu = (profile?.education as any[]) ?? [];
+    const exp = (profile?.experience as any[]) ?? [];
+
     return {
       applicationId: match.id,
       answers: (fa.answers ?? []).map((a: any) => ({ fieldId: a.fieldId, label: a.label, value: a.value, type: a.type })),
+      education: edu.map((e) => ({
+        school: String(e.institution ?? e.school ?? ''),
+        field_of_study: String(e.field ?? e.fieldOfStudy ?? e.field_of_study ?? ''),
+        degree: String(e.degree ?? ''),
+        start_date: this.toMMYYYY(e.startDate ?? e.start_date),
+        end_date: this.toMMYYYY(e.endDate ?? e.end_date),
+      })),
+      experience: exp.map((e) => ({
+        title: String(e.title ?? ''),
+        company: String(e.company ?? ''),
+        industry: String(e.industry ?? ''),
+        summary: String(e.description ?? (Array.isArray(e.bullets) ? e.bullets.join('\n') : '') ?? ''),
+        start_date: this.toMMYYYY(e.startDate ?? e.start_date),
+        end_date: this.toMMYYYY(e.endDate ?? e.end_date),
+        current: Boolean(e.current ?? (!e.endDate && !e.end_date)),
+      })),
       resumeUrl: `/applications/${match.id}/resume.pdf`,
       resumeFilename: 'Resume.pdf',
     };
+  }
+
+  /** Best-effort convert a resume date into Workable's MM/YYYY text format. */
+  private toMMYYYY(value: unknown): string {
+    if (!value) return '';
+    const v = String(value).trim();
+    if (/^(present|current|now|ongoing)$/i.test(v)) return '';
+    let m = v.match(/^(\d{4})[-/.](\d{1,2})/); // 2021-03
+    if (m) return `${String(Number(m[2])).padStart(2, '0')}/${m[1]}`;
+    m = v.match(/^(\d{1,2})[-/.](\d{4})$/); // 03/2021
+    if (m) return `${String(Number(m[1])).padStart(2, '0')}/${m[2]}`;
+    const months: Record<string, number> = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+    m = v.match(/^([a-z]{3,})\.?\s+(\d{4})/i); // Mar 2021
+    if (m) {
+      const mo = months[m[1]!.slice(0, 3).toLowerCase()];
+      if (mo) return `${String(mo).padStart(2, '0')}/${m[2]}`;
+    }
+    m = v.match(/^(\d{4})$/); // bare year
+    if (m) return `01/${m[1]}`;
+    return '';
   }
 
   /** ResumeData for this application's PDF — tailored when available. */

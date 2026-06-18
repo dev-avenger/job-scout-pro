@@ -151,8 +151,17 @@ async function handleAutofill() {
   // Remember the matched application so assisted-submit can target it.
   lastApplicationId = res.data.applicationId ?? null;
 
-  // 2) Tell the content script to fill the form in THIS (the user's) browser.
-  chrome.tabs.sendMessage(tab.id, { type: 'AUTOFILL', answers: res.data.answers }, (fill) => {
+  // 2) Tell the content script to fill the form in THIS (the user's) browser —
+  //    flat fields + repeatable Education/Experience group sections.
+  chrome.tabs.sendMessage(
+    tab.id,
+    {
+      type: 'AUTOFILL',
+      answers: res.data.answers,
+      education: res.data.education ?? [],
+      experience: res.data.experience ?? [],
+    },
+    (fill) => {
     if (fill?.success) {
       statusEl.innerHTML = `Filled ${fill.filled} fields. <b>Attach your resume, solve the human check, and submit.</b>`;
       statusEl.className = 'status success';

@@ -5,7 +5,7 @@ export interface IApplicationService {
   getById(userId: string, applicationId: string): Promise<unknown>;
   getDetail(userId: string, applicationId: string): Promise<unknown>;
   getResumeData(userId: string, applicationId: string): Promise<{ data: unknown; filename: string } | null>;
-  getAutofill(userId: string, pageUrl: string): Promise<{ applicationId: string; answers: Array<{ fieldId: string; label?: string; value: unknown; type?: string }>; resumeUrl: string; resumeFilename: string } | null>;
+  getAutofill(userId: string, pageUrl: string): Promise<{ applicationId: string; answers: Array<{ fieldId: string; label?: string; value: unknown; type?: string }>; education: Array<Record<string, string>>; experience: Array<Record<string, string | boolean>>; resumeUrl: string; resumeFilename: string } | null>;
   updateFormAnswers(userId: string, applicationId: string, answers: unknown): Promise<void>;
   queue(userId: string, jobId: string, autonomyMode: string): Promise<{ id: string; alreadyExists: boolean }>;
   updateStatus(userId: string, applicationId: string, newStatus: ApplicationStatus): Promise<void>;
