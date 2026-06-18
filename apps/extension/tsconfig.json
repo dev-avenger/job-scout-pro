@@ -5,7 +5,8 @@
     "rootDir": "./src",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "moduleDetection": "auto"
   },
   "include": ["src/**/*"]
 }
