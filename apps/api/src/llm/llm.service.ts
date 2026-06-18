@@ -26,6 +26,10 @@ const logger = createLogger({ name: 'llm-service' });
 @Injectable()
 export class LlmService implements ILLMService, OnModuleInit {
   readonly promptRegistry: PromptRegistry;
+  /** Configured Ollama base URL, used for the local generation/embedding fallback. */
+  private ollamaUrl?: string;
+  /** Local model used when a cloud provider fails. */
+  private readonly OLLAMA_FALLBACK_MODEL = 'llama3.1:8b';
 
   constructor(
     private readonly modelRouter: ModelRouter,
@@ -44,6 +48,7 @@ export class LlmService implements ILLMService, OnModuleInit {
     const geminiKey = this.configService.get<string>('GEMINI_API_KEY');
     const geminiModel = this.configService.get<string>('GEMINI_MODEL');
     const ollamaUrl = this.configService.get<string>('OLLAMA_BASE_URL');
+    this.ollamaUrl = ollamaUrl;
 
     if (openaiKey) {
       this.modelRouter.registerProvider(new OpenAIProvider(openaiKey));
@@ -147,6 +152,27 @@ export class LlmService implements ILLMService, OnModuleInit {
         jobId: context.jobId,
       });
 
+      // Fallback: retry on the local Ollama provider so a cloud outage/quota
+      // doesn't block the pipeline (free, offline). Skipped if Ollama was the
+      // primary that just failed.
+      if (provider.name !== 'ollama') {
+        try {
+          const ollama = new OllamaProvider(this.ollamaUrl);
+          const model = this.OLLAMA_FALLBACK_MODEL;
+          const response = await ollama.generateText({ ...params, model });
+          logger.warn({ taskType, primary: provider.name }, 'Primary LLM failed — fell back to local Ollama');
+          await this.requestLogger.log({
+            userId: context.userId, agentName: taskType, taskType, model, provider: ollama.name,
+            inputTokens: response.usage.inputTokens, outputTokens: response.usage.outputTokens,
+            costCents: 0, latencyMs: response.latencyMs,
+            applicationId: context.applicationId, jobId: context.jobId,
+          });
+          return { ...response, model, provider: ollama.name, costCents: 0 };
+        } catch (fallbackErr) {
+          logger.error({ fallbackErr }, 'Ollama generation fallback also failed');
+        }
+      }
+
       throw err;
     }
   }
@@ -186,6 +212,30 @@ export class LlmService implements ILLMService, OnModuleInit {
         { err, message: err instanceof Error ? err.message : String(err), taskType, model: modelId },
         'LLM structured request failed',
       );
+
+      // Fallback to local Ollama (structured) when a cloud provider fails.
+      if (provider.name !== 'ollama') {
+        try {
+          const ollama = new OllamaProvider(this.ollamaUrl);
+          const model = this.OLLAMA_FALLBACK_MODEL;
+          const response = await ollama.generateStructured({ ...params, model });
+          logger.warn({ taskType, primary: provider.name }, 'Primary LLM failed — fell back to local Ollama');
+          await this.requestLogger.log({
+            userId: context.userId, agentName: taskType, taskType, model, provider: ollama.name,
+            inputTokens: response.usage.inputTokens, outputTokens: response.usage.outputTokens,
+            costCents: 0, latencyMs: response.latencyMs,
+            applicationId: context.applicationId, jobId: context.jobId,
+          });
+          return { ...response, model, provider: ollama.name, costCents: 0 } as LLMStructuredResponse<T> & {
+            model: string;
+            provider: string;
+            costCents: number;
+          };
+        } catch (fallbackErr) {
+          logger.error({ fallbackErr }, 'Ollama structured fallback also failed');
+        }
+      }
+
       throw err;
     }
   }
@@ -195,7 +245,8 @@ export class LlmService implements ILLMService, OnModuleInit {
     try {
       return await provider.getEmbedding(text);
     } catch {
-      const ollama = new OllamaProvider();
+      // Honor OLLAMA_BASE_URL on the fallback path (was hardcoded to localhost).
+      const ollama = new OllamaProvider(this.ollamaUrl);
       return ollama.getEmbedding(text);
     }
   }
