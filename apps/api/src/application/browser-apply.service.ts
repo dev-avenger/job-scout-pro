@@ -14,6 +14,7 @@ import { AtsApplyService } from './ats-apply.service.js';
 import { AnswerBank } from './answer-bank.js';
 import { PdfGenerator } from '../resume/export/pdf-generator.js';
 import { buildResumeData } from '../resume/export/resume-data.js';
+import { FormMemory } from './form-memory.js';
 
 const logger = createLogger({ name: 'browser-apply' });
 
@@ -265,17 +266,25 @@ export class BrowserApplyService {
       await page.goto(formUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
       await page.waitForTimeout(2500);
 
-      // Fill fields from the prepared answers — handles text inputs, native
-      // <select>, and Workable's custom combobox dropdowns.
+      // Fill prepared answers across ONE or MORE steps. Multi-step ATS forms
+      // reveal later fields only after earlier steps advance, so we fill what's
+      // present, click Next, and fill again. FormMemory records what we've
+      // already filled so nothing is re-entered. Single-step forms fill once,
+      // find no "Next" button, and fall straight through to the submit logic
+      // below — identical behaviour to before.
       const answers = params.answers ?? [];
+      const memory = new FormMemory();
+      const labelOf = (a: (typeof answers)[number]) => a.label ?? a.fieldId;
       let filled = 0;
-      for (const a of answers) {
-        if (a.value == null || a.value === '' || a.type === 'file') continue;
+      let resumeAttached = false;
+
+      // Attempt to fill ONE prepared answer on the current DOM. Returns true
+      // only if a field was actually filled (Workable combobox, native select,
+      // or plain input — same strategies as before, just per-field).
+      const tryFill = async (a: (typeof answers)[number]): Promise<boolean> => {
         const id = a.fieldId;
         const value = String(a.value);
-
-        // 1) Workable custom dropdown: an input[role=combobox] that opens a
-        //    listbox of [role=option]; click the trigger then the matching option.
+        // 1) Workable custom dropdown
         try {
           const combo = page
             .locator(`[id="input_${id}_input"], [data-ui="${id}"] input[role="combobox"]`)
@@ -290,27 +299,23 @@ export class BrowserApplyService {
             const target = (await opt.count()) ? opt : optLoose;
             if (await target.count()) {
               await target.click({ timeout: 3000 });
-              filled++;
-              continue;
+              return true;
             }
             await page.keyboard.press('Escape').catch(() => {});
           }
         } catch {
           /* fall through to other strategies */
         }
-
         // 2) Native <select>
         try {
           const native = page.locator(`select[name="${id}"], select[id="${id}"]`).first();
           if (await native.count()) {
             await native.selectOption({ label: value }).catch(() => native.selectOption(value));
-            filled++;
-            continue;
+            return true;
           }
         } catch {
           /* fall through */
         }
-
         // 3) Plain text/email/tel input
         try {
           const loc = page
@@ -318,20 +323,20 @@ export class BrowserApplyService {
             .first();
           if (await loc.count()) {
             await loc.fill(value, { timeout: 3000 });
-            filled++;
+            return true;
           }
         } catch {
           /* not fillable — leave for the human */
         }
-      }
+        return false;
+      };
 
-      // Upload the resume PDF to the resume file input.
-      let resumeAttached = false;
-      if (resumePath) {
-        const fileSel =
-          'input[type=file][data-ui=resume], input[type=file][name=resume], input[type=file][accept*="pdf"]';
+      const attachResume = async () => {
+        if (resumeAttached || !resumePath) return;
         try {
-          const f = page.locator(fileSel).first();
+          const f = page
+            .locator('input[type=file][data-ui=resume], input[type=file][name=resume], input[type=file][accept*="pdf"]')
+            .first();
           if (await f.count()) {
             await f.setInputFiles(resumePath);
             resumeAttached = true;
@@ -339,6 +344,34 @@ export class BrowserApplyService {
         } catch {
           /* ignore */
         }
+      };
+
+      const MAX_STEPS = 8;
+      for (let step = 0; step < MAX_STEPS; step++) {
+        for (const a of answers) {
+          if (a.value == null || a.value === '' || a.type === 'file') continue;
+          const fk = { key: a.fieldId, label: labelOf(a) };
+          if (memory.getAnswer(fk) !== undefined) continue; // already filled on an earlier step
+          if (await tryFill(a)) {
+            memory.setAnswer(fk, String(a.value));
+            filled++;
+          }
+        }
+        await attachResume();
+
+        // Advance to the next step ONLY when a Next/Continue control exists and
+        // there is no final Submit yet. Otherwise this is the last (or only)
+        // step → break and run the existing anti-bot + submit logic unchanged.
+        const submitVisible = await page
+          .locator('[data-ui=apply-button], button[type=submit]:has-text("Submit"), button:has-text("Submit application")')
+          .first()
+          .count();
+        const nextBtn = page
+          .locator('button:has-text("Next"), button:has-text("Continue"), [data-ui="next-button"], button[aria-label*="next" i]')
+          .first();
+        if (submitVisible || !(await nextBtn.count())) break;
+        await nextBtn.click().catch(() => {});
+        await page.waitForTimeout(2000);
       }
 
       // Anti-bot challenge present? (Workable uses Cloudflare Turnstile.)
