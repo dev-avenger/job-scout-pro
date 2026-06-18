@@ -94,13 +94,13 @@ export class RssFeedSource implements IJobSource {
 function extractCompanyFromTitle(title: string): string {
   // Common patterns: "Title at Company", "Title - Company", "Company: Title"
   const atMatch = title.match(/\bat\s+(.+?)(?:\s*[-|]|$)/i);
-  if (atMatch) return atMatch[1].trim();
+  if (atMatch) return (atMatch[1] ?? '').trim();
 
   const dashMatch = title.match(/\s[-|]\s(.+?)$/);
-  if (dashMatch) return dashMatch[1].trim();
+  if (dashMatch) return (dashMatch[1] ?? '').trim();
 
   const colonMatch = title.match(/^(.+?):\s/);
-  if (colonMatch) return colonMatch[1].trim();
+  if (colonMatch) return (colonMatch[1] ?? '').trim();
 
   return '';
 }

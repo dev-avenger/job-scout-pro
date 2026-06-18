@@ -23,9 +23,9 @@ function stringSimilarity(a: string, b: string): number {
       if (i === 0) {
         costs[j] = j;
       } else if (j > 0) {
-        let newValue = costs[j - 1];
+        let newValue = costs[j - 1]!;
         if (longer[i - 1] !== shorter[j - 1]) {
-          newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+          newValue = Math.min(Math.min(newValue, lastValue), costs[j]!) + 1;
         }
         costs[j - 1] = lastValue;
         lastValue = newValue;
@@ -33,7 +33,7 @@ function stringSimilarity(a: string, b: string): number {
     }
     if (i > 0) costs[shorter.length] = lastValue;
   }
-  return 1 - costs[shorter.length] / longer.length;
+  return 1 - costs[shorter.length]! / longer.length;
 }
 
 @Injectable()

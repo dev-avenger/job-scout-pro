@@ -80,6 +80,9 @@ export class EmailParser {
 
     // Parse calendar events from .ics attachments
     const calendarEvents: CalendarEvent[] = [];
+    // node-ical types these as ParameterValue (string | { val }); coerce to string.
+    const icsText = (v: unknown): string =>
+      typeof v === 'string' ? v : ((v as { val?: string })?.val ?? '');
     for (const att of parsed.attachments || []) {
       if (att.contentType?.includes('calendar') || att.filename?.endsWith('.ics')) {
         try {
@@ -90,11 +93,11 @@ export class EmailParser {
               const vevent = event as ical.VEvent;
               calendarEvents.push({
                 uid: vevent.uid || '',
-                summary: vevent.summary || '',
-                description: vevent.description || '',
+                summary: icsText(vevent.summary),
+                description: icsText(vevent.description),
                 start: vevent.start ? new Date(vevent.start as any) : new Date(),
                 end: vevent.end ? new Date(vevent.end as any) : new Date(),
-                location: vevent.location || '',
+                location: icsText(vevent.location),
                 organizer: typeof vevent.organizer === 'string' ? vevent.organizer : (vevent.organizer as any)?.val || '',
                 method: (events as any).method || 'REQUEST',
               });

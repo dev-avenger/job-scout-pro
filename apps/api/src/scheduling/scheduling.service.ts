@@ -21,7 +21,9 @@ export class SchedulingService implements ISchedulingService, OnModuleInit {
     ];
 
     for (const name of queueNames) {
-      this.queues.set(name, new Queue(name, { connection: this.redis }));
+      // `as any`: bullmq and this service can resolve to different ioredis
+      // minor versions in the workspace; the Redis client is compatible at runtime.
+      this.queues.set(name, new Queue(name, { connection: this.redis as any }));
     }
 
     logger.info('Scheduling service initialized');

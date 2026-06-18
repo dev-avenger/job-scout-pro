@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
-interface AtsSectionScore {
+export interface AtsSectionScore {
   score: number;
   feedback: string;
 }
