@@ -17,19 +17,22 @@ async function checkConnection() {
   const statusText = document.getElementById('statusText')!;
 
   try {
-    const state = await sendMessage({ type: 'GET_AUTH_STATE' });
-    authToken = state.token;
+    const state = await withTimeout(sendMessage({ type: 'GET_AUTH_STATE' }), 2500);
+    authToken = state?.token ?? null;
 
     if (authToken) {
-      // Verify token is valid
-      const response = await fetch(`${state.baseUrl}/health`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
-      isConnected = response.ok;
+      // Health route lives at the server root (/health), not under /api/v1.
+      const origin = String(state.baseUrl || '').replace(/\/api\/v1\/?$/, '');
+      const response = await withTimeout(
+        fetch(`${origin}/health`, { headers: { Authorization: `Bearer ${authToken}` } }),
+        3000,
+      );
+      isConnected = Boolean(response && response.ok);
     } else {
       isConnected = false;
     }
   } catch {
+    // timeout, no service worker, or server unreachable → show "Not connected"
     isConnected = false;
   }
 
@@ -224,6 +227,14 @@ async function handleDisconnect() {
 // ---- Helpers ----
 function sendMessage(msg: any): Promise<any> {
   return new Promise((resolve) => chrome.runtime.sendMessage(msg, resolve));
+}
+
+/** Reject after `ms` so the popup never hangs on a stuck await (e.g. "Checking..."). */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ]);
 }
 
 function getTimeAgo(timestamp: number): string {
