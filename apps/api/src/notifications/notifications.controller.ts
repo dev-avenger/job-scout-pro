@@ -51,6 +51,14 @@ export class NotificationsController {
     return this.notificationsService.createAlertRule(user.sub, body);
   }
 
+  @Post('notifications/test-channel')
+  async testChannel(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { channel: string; webhookUrl?: string },
+  ) {
+    return this.notificationsService.sendTestNotification(user.sub, body.channel, body.webhookUrl);
+  }
+
   @Delete('alerts/rules/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteAlertRule(@Param('id') id: string) {

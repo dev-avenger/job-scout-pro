@@ -11,4 +11,5 @@ export interface INotificationsRepository {
   getFailureRate(userId: string, hours?: number): Promise<number>;
   getTodaySpendCents(userId: string): Promise<number>;
   getDispatchInfo(userId: string): Promise<{ email: string | null; smtpConfig: any | null }>;
+  getNotificationChannels(userId: string): Promise<Record<string, any> | null>;
 }

@@ -133,36 +133,103 @@ export class NotificationsService implements INotificationsService {
 
   private async dispatch(userId: string, rule: any, breach: { title: string; body: string }): Promise<void> {
     try {
-      if (rule.channel === 'webhook' && rule.webhookUrl) {
-        await fetch(rule.webhookUrl, {
+      await this.sendToChannel(userId, rule.channel, rule.webhookUrl, breach.title, breach.body, {
+        conditionType: rule.conditionType,
+      });
+      logger.info({ ruleId: rule.id, channel: rule.channel }, 'Alert dispatched');
+    } catch (err) {
+      logger.error({ error: err, ruleId: rule.id, channel: rule.channel }, 'Alert dispatch failed');
+    }
+  }
+
+  /**
+   * Deliver a message to a single notification channel. Slack uses an incoming
+   * webhook URL; Telegram uses a bot token + chat id stored in the user's
+   * `notificationChannels` config; both are user-supplied at runtime — no
+   * build-time credentials. Throws on misconfiguration so callers (e.g. the
+   * test endpoint) can surface the reason.
+   */
+  private async sendToChannel(
+    userId: string,
+    channel: string,
+    webhookUrl: string | null | undefined,
+    title: string,
+    body: string,
+    extra?: { conditionType?: string },
+  ): Promise<void> {
+    switch (channel) {
+      case 'webhook': {
+        if (!webhookUrl) throw new Error('No webhook URL configured');
+        await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             event: 'alert',
-            conditionType: rule.conditionType,
-            title: breach.title,
-            body: breach.body,
+            conditionType: extra?.conditionType,
+            title,
+            body,
             firedAt: new Date().toISOString(),
           }),
         });
-        logger.info({ ruleId: rule.id }, 'Alert dispatched to webhook');
-      } else if (rule.channel === 'email') {
-        const { email, smtpConfig } = await this.repo.getDispatchInfo(userId);
-        if (email && smtpConfig) {
-          await this.smtp.sendEmail(smtpConfig, {
-            to: email,
-            subject: `[Job Agent] ${breach.title}`,
-            text: breach.body,
-            html: `<p>${breach.body}</p>`,
-          });
-          logger.info({ ruleId: rule.id }, 'Alert dispatched via email');
-        } else {
-          logger.warn({ userId }, 'Email alert configured but no recipient/SMTP config');
-        }
+        return;
       }
-      // channel === 'in_app' needs no extra dispatch — the notification row is enough.
-    } catch (err) {
-      logger.error({ error: err, ruleId: rule.id }, 'Alert dispatch failed');
+      case 'slack': {
+        const url = webhookUrl ?? (await this.repo.getNotificationChannels(userId))?.slackWebhookUrl;
+        if (!url) throw new Error('No Slack incoming-webhook URL configured');
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: `*${title}*\n${body}` }),
+        });
+        if (!res.ok) throw new Error(`Slack webhook returned ${res.status}`);
+        return;
+      }
+      case 'telegram': {
+        const tg = (await this.repo.getNotificationChannels(userId))?.telegram as
+          | { botToken?: string; chatId?: string }
+          | undefined;
+        if (!tg?.botToken || !tg?.chatId) {
+          throw new Error('Telegram bot token / chat id not configured');
+        }
+        const res = await fetch(`https://api.telegram.org/bot${tg.botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: tg.chatId, text: `*${title}*\n${body}`, parse_mode: 'Markdown' }),
+        });
+        if (!res.ok) throw new Error(`Telegram API returned ${res.status}`);
+        return;
+      }
+      case 'email': {
+        const { email, smtpConfig } = await this.repo.getDispatchInfo(userId);
+        if (!email || !smtpConfig) throw new Error('No email recipient / SMTP config');
+        await this.smtp.sendEmail(smtpConfig, {
+          to: email,
+          subject: `[Job Agent] ${title}`,
+          text: body,
+          html: `<p>${body}</p>`,
+        });
+        return;
+      }
+      case 'in_app':
+        return; // the in-app notification row is the delivery; nothing else to do.
+      default:
+        throw new Error(`Unknown notification channel: ${channel}`);
     }
+  }
+
+  /** Send a sample message to a channel so the user can verify their config. */
+  async sendTestNotification(
+    userId: string,
+    channel: string,
+    webhookUrl?: string,
+  ): Promise<{ success: true }> {
+    await this.sendToChannel(
+      userId,
+      channel,
+      webhookUrl,
+      'Test notification',
+      'This is a test from your job agent — this channel is configured correctly.',
+    );
+    return { success: true };
   }
 }

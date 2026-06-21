@@ -5,6 +5,10 @@ export interface ISettingsService {
   updateBlacklists(userId: string, data: { companyBlacklist?: string[]; keywordBlacklist?: string[] }): Promise<void>;
   updatePreferences?(userId: string, data: Record<string, unknown>): Promise<void>;
   updateEmailConfig?(userId: string, data: Record<string, unknown>): Promise<void>;
+  updateNotificationChannels?(
+    userId: string,
+    data: { slackWebhookUrl?: string; telegram?: { botToken?: string; chatId?: string } },
+  ): Promise<void>;
   updateApiKeys?(userId: string, data: Record<string, unknown>): Promise<void>;
   completeOnboarding(userId: string, payload: OnboardingPayload): Promise<void>;
   saveOnboardingProgress(userId: string, draft: Record<string, unknown>): Promise<void>;

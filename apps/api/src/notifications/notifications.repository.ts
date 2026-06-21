@@ -94,4 +94,12 @@ export class NotificationsRepository implements INotificationsRepository {
     const channels = (prefs?.notificationChannels as Record<string, any> | null) ?? null;
     return { email: user?.email ?? null, smtpConfig: channels?.emailSmtpConfig ?? null };
   }
+
+  /** The user's notificationChannels JSONB bag (Slack webhook, Telegram, SMTP, …). */
+  async getNotificationChannels(userId: string): Promise<Record<string, any> | null> {
+    const prefs = (await this.db.query.userPreferences.findFirst({
+      where: eq(userPreferences.userId, userId),
+    })) as any;
+    return (prefs?.notificationChannels as Record<string, any> | null) ?? null;
+  }
 }

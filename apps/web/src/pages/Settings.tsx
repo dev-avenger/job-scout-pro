@@ -265,6 +265,12 @@ export function Settings({ embedded = false }: { embedded?: boolean } = {}) {
   const [quietHoursFrom, setQuietHoursFrom] = useState('22:00');
   const [quietHoursTo, setQuietHoursTo] = useState('08:00');
   const [savingNotifications, setSavingNotifications] = useState(false);
+  /* ── Messaging channels (Slack / Telegram) ── */
+  const [slackWebhookUrl, setSlackWebhookUrl] = useState('');
+  const [telegramBotToken, setTelegramBotToken] = useState('');
+  const [telegramChatId, setTelegramChatId] = useState('');
+  const [savingChannels, setSavingChannels] = useState(false);
+  const [testingChannel, setTestingChannel] = useState<string | null>(null);
 
   /* ── Blacklists state ── */
   const [companyBlacklist, setCompanyBlacklist] = useState('');
@@ -494,6 +500,35 @@ export function Settings({ embedded = false }: { embedded?: boolean } = {}) {
       addToast('error', err instanceof Error ? err.message : 'Failed to save notifications');
     } finally {
       setSavingNotifications(false);
+    }
+  }
+
+  async function handleSaveChannels() {
+    setSavingChannels(true);
+    try {
+      await apiClient.put('/settings/notification-channels', {
+        slackWebhookUrl: slackWebhookUrl.trim(),
+        telegram: { botToken: telegramBotToken.trim(), chatId: telegramChatId.trim() },
+      });
+      addToast('success', 'Messaging channels saved.');
+    } catch (err) {
+      addToast('error', err instanceof Error ? err.message : 'Failed to save channels');
+    } finally {
+      setSavingChannels(false);
+    }
+  }
+
+  async function handleTestChannel(channel: 'slack' | 'telegram') {
+    setTestingChannel(channel);
+    try {
+      // Send the saved config first so the test uses the latest values.
+      await handleSaveChannels();
+      await apiClient.post('/notifications/test-channel', { channel });
+      addToast('success', `Test sent to ${channel} — check the app.`);
+    } catch (err) {
+      addToast('error', err instanceof Error ? err.message : `Failed to send ${channel} test`);
+    } finally {
+      setTestingChannel(null);
     }
   }
 
@@ -1257,6 +1292,84 @@ export function Settings({ embedded = false }: { embedded?: boolean } = {}) {
                   </div>
 
                   <SaveButton saving={savingNotifications} onClick={handleSaveNotifications} />
+                </CardContent>
+              </Card>
+
+              <Card className="border-border/60 shadow-soft mt-6">
+                <CardHeader>
+                  <CardTitle className="text-lg">Messaging Channels</CardTitle>
+                  <CardDescription>
+                    Forward alerts to Slack or Telegram. Paste your own webhook / bot credentials —
+                    nothing is shared. Used by alert rules with the matching channel.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Slack */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Slack incoming webhook URL</Label>
+                    <Input
+                      type="url"
+                      placeholder="https://hooks.slack.com/services/…"
+                      value={slackWebhookUrl}
+                      onChange={(e) => setSlackWebhookUrl(e.target.value)}
+                      className="bg-muted/50"
+                    />
+                    <div className="flex justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleTestChannel('slack')}
+                        disabled={testingChannel === 'slack' || !slackWebhookUrl.trim()}
+                      >
+                        {testingChannel === 'slack' && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                        Send test
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Telegram */}
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Telegram bot token</Label>
+                      <Input
+                        type="password"
+                        placeholder="123456:ABC-DEF…"
+                        value={telegramBotToken}
+                        onChange={(e) => setTelegramBotToken(e.target.value)}
+                        className="bg-muted/50"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Telegram chat ID</Label>
+                      <Input
+                        placeholder="e.g. 987654321"
+                        value={telegramChatId}
+                        onChange={(e) => setTelegramChatId(e.target.value)}
+                        className="bg-muted/50"
+                      />
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleTestChannel('telegram')}
+                        disabled={
+                          testingChannel === 'telegram' ||
+                          !telegramBotToken.trim() ||
+                          !telegramChatId.trim()
+                        }
+                      >
+                        {testingChannel === 'telegram' && (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        )}
+                        Send test
+                      </Button>
+                    </div>
+                  </div>
+
+                  <SaveButton saving={savingChannels} onClick={handleSaveChannels} />
                 </CardContent>
               </Card>
             </TabsContent>

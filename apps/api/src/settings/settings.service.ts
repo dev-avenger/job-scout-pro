@@ -199,6 +199,31 @@ export class SettingsService implements ISettingsService {
     await this.repo.updatePreferences(userId, { notificationChannels: channels });
   }
 
+  /**
+   * Persist Slack/Telegram messaging-channel config into the notificationChannels
+   * JSONB bag. All values are user-supplied at runtime (a Slack incoming-webhook
+   * URL, a Telegram bot token + chat id) — no build-time credentials.
+   */
+  async updateNotificationChannels(
+    userId: string,
+    data: { slackWebhookUrl?: string; telegram?: { botToken?: string; chatId?: string } },
+  ) {
+    const prefs = await this.repo.getPreferences(userId);
+    const channels = ((prefs?.notificationChannels as Record<string, unknown>) ?? {});
+
+    if (data.slackWebhookUrl !== undefined) {
+      channels.slackWebhookUrl = data.slackWebhookUrl || undefined;
+    }
+    if (data.telegram !== undefined) {
+      channels.telegram =
+        data.telegram.botToken || data.telegram.chatId
+          ? { botToken: data.telegram.botToken, chatId: data.telegram.chatId }
+          : undefined;
+    }
+
+    await this.repo.updatePreferences(userId, { notificationChannels: channels });
+  }
+
   async updateApiKeys(userId: string, data: Record<string, unknown>) {
     const patch: Record<string, unknown> = {};
     if (data.portalCredentials !== undefined) patch.portalCredentials = data.portalCredentials;

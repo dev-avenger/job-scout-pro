@@ -119,10 +119,16 @@ All six shipped; API + web typecheck clean. New endpoints: `POST /research/inter
 - On interview classification (`inboxEmails.classification='interview'`), create a calendar
   event. `calendarEventCreated` flag already in schema. Same OAuth as 3.1.
 
-### 3.3 Messaging notification channels (WhatsApp/Telegram/Slack)  · **M**
-- The notification dispatch engine added this session already supports webhook + email.
-- Add channel adapters: Slack (incoming webhook — trivial), Telegram (bot token),
-  WhatsApp (Business API / Twilio). Plug into `NotificationsService.dispatch()`.
+### 3.3 Messaging notification channels (WhatsApp/Telegram/Slack)  · ⏳ **Slack + Telegram DONE (2026-06-21)**
+- `NotificationsService.sendToChannel` now handles `slack` (incoming-webhook URL) and
+  `telegram` (bot token + chat id from `notificationChannels`) alongside webhook/email;
+  `dispatch()` routes alert rules through it. Credentials are user-supplied at runtime —
+  no build-time secrets / OAuth.
+- Config: `PUT /settings/notification-channels` persists Slack URL + Telegram token/chat
+  id into the `notificationChannels` JSONB (no migration). `POST /notifications/test-channel`
+  sends a sample message. Settings → Notifications has a "Messaging Channels" card with
+  Save + per-channel "Send test".
+- **WhatsApp still TODO** — needs a paid Business API / Twilio account, so deferred.
 
 ### 3.4 LinkedIn profile optimizer (read-only)  · **M**
 - Import-only (no automation, per spec). Parse a LinkedIn export → LLM recommendations.

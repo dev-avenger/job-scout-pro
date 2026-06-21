@@ -10,6 +10,7 @@ export interface INotificationsService {
   createAlertRule(userId: string, data: { conditionType: string; threshold?: number; channel: string; webhookUrl?: string }): Promise<{ id: string }>;
   deleteAlertRule(ruleId: string): Promise<void>;
   evaluateAlertRules(userId: string): Promise<number>;
+  sendTestNotification(userId: string, channel: string, webhookUrl?: string): Promise<{ success: true }>;
   getUnreadCount?(userId: string): Promise<number>;
   delete?(notificationId: string): Promise<void>;
 }

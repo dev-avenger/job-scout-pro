@@ -149,6 +149,15 @@ export class SettingsController {
     await this.settingsService.updateEmailConfig?.(user.sub, body);
   }
 
+  @Put('notification-channels')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async updateNotificationChannels(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { slackWebhookUrl?: string; telegram?: { botToken?: string; chatId?: string } },
+  ) {
+    await this.settingsService.updateNotificationChannels?.(user.sub, body);
+  }
+
   @Put('api-keys')
   @HttpCode(HttpStatus.NO_CONTENT)
   async updateApiKeys(
