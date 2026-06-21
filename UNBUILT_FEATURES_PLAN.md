@@ -62,9 +62,13 @@ All six shipped; API + web typecheck clean. New endpoints: `POST /research/inter
 - Analytics: `GET /analytics/ab-results` aggregates callback (interview/offer) rate
   per variant; surfaced as a "Resume A/B Testing" section on the Analytics page.
 
-### 2.2 Global Cmd+K search  · **M**
-- Frontend-only: a command palette (e.g. `cmdk`) querying existing list endpoints
-  (jobs, applications, contacts, profiles) with client-side fuzzy match + route nav.
+### 2.2 Global Cmd+K search  · ✅ **DONE (2026-06-21)**
+- Frontend-only `CommandPalette` (uses the already-installed `cmdk`), mounted in
+  `Layout` and opened via ⌘/Ctrl+K or a top-bar "Search" button.
+- Searches static page-nav commands + lazily-loaded applications, contacts, and
+  jobs (existing `/applications`, `/contacts`, `/jobs` list endpoints) with cmdk's
+  built-in fuzzy filtering; selecting routes to the item (application → detail,
+  contact → Networking, job → Jobs queue).
 
 ### 2.3 Missing job sources  · **M each**
 - **RSS-as-channel**: ✅ **already built** — `rss-feed.source.ts` is a complete,

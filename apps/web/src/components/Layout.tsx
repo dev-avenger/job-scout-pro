@@ -35,12 +35,14 @@ import {
   UserCog,
   ChevronsUpDown,
   Inbox as InboxIcon,
+  Search,
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { apiClient } from '../api/client';
 import { OnboardingGate } from './OnboardingGate';
 import { AccountModal } from './AccountModal';
 import { SettingsModal } from './SettingsModal';
+import { CommandPalette } from './CommandPalette';
 
 const navigation = [
   {
@@ -98,6 +100,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [isPaused, setIsPaused] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const resolvedTheme = useThemeStore((s) => s.resolvedTheme);
   const setTheme = useThemeStore((s) => s.setTheme);
 
@@ -183,6 +186,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         onOpenSettings={() => setSettingsOpen(true)}
       />
       <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       {/* Sidebar */}
       <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 border-r border-sidebar-border bg-sidebar z-30">
         <div className="flex flex-col h-full">
@@ -308,6 +312,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="hidden md:flex fixed top-0 left-64 right-0 z-20 bg-background/80 backdrop-blur-md border-b px-6 py-3 items-center justify-between">
         <p className="text-sm font-semibold text-foreground/80">{currentPage?.name ?? ''}</p>
         <div className="flex items-center gap-1">
+          <button
+            onClick={() => setPaletteOpen(true)}
+            title="Search (Ctrl/⌘ + K)"
+            className="mr-1 hidden lg:flex items-center gap-2 rounded-lg border border-border/60 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <Search className="h-3.5 w-3.5" />
+            <span>Search</span>
+            <kbd className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">⌘K</kbd>
+          </button>
           <button
             onClick={toggleTheme}
             title={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
