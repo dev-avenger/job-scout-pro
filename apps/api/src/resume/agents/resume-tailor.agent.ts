@@ -21,6 +21,17 @@ const TailoredResumeSchema = z.object({
 
 export type TailoredResume = z.infer<typeof TailoredResumeSchema>;
 
+export type ResumeVariant = 'A' | 'B';
+
+// Two tailoring strategies we A/B test against real callback rate. Variant A is
+// the established impact-narrative style; variant B leans into ATS keyword
+// density. The chosen variant is recorded on the application so Analytics can
+// compare which produces more interviews/offers.
+const VARIANT_DIRECTIVES: Record<ResumeVariant, string> = {
+  A: 'Optimise for a compelling impact narrative: lead each bullet with a strong outcome and a quantified result, and keep the summary story-driven.',
+  B: 'Optimise for ATS keyword matching: mirror the exact terminology, tools, and skill phrases from the job description across the summary, bullets, and skills, prioritising coverage of the required keywords.',
+};
+
 @Injectable()
 export class ResumeTailorAgent extends BaseAgent {
   constructor(@Inject(LLM_SERVICE) llmService: ILLMService) {
@@ -31,6 +42,7 @@ export class ResumeTailorAgent extends BaseAgent {
     profile: Record<string, unknown>,
     jobDescription: string,
     context: AgentContext,
+    variant: ResumeVariant = 'A',
   ): Promise<{ tailored: TailoredResume; costCents: number }> {
     const systemPrompt = this.llmService.promptRegistry.getSystem('resume_tailor');
     const userPrompt = `## Candidate Profile
@@ -38,6 +50,9 @@ ${JSON.stringify(profile, null, 2)}
 
 ## Job Description
 ${jobDescription}
+
+## Tailoring Strategy
+${VARIANT_DIRECTIVES[variant]}
 
 Tailor the resume to match this job. Return a JSON object with:
 - summary: A tailored professional summary (2-3 sentences)

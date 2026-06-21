@@ -48,4 +48,8 @@ export class AnalyticsService implements IAnalyticsService {
   async getCostTrends(userId: string, days: number) {
     return this.repo.getCostTrends(userId, days);
   }
+
+  async getAbResults(userId: string) {
+    return this.repo.getAbResults(userId);
+  }
 }

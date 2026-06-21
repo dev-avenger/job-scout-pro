@@ -12,4 +12,9 @@ export interface IAnalyticsRepository {
     userId: string,
   ): Promise<{ source: string; applications: number; interviews: number; offers: number }[]>;
   getCostTrends(userId: string, days: number): Promise<{ date: string; costCents: number }[]>;
+  getAbResults(
+    userId: string,
+  ): Promise<
+    { variant: string; applications: number; interviews: number; offers: number; callbacks: number; callbackRate: number }[]
+  >;
 }

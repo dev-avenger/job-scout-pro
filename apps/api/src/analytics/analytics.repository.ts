@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, gte, sql, desc, inArray } from 'drizzle-orm';
+import { eq, and, gte, sql, desc, inArray, isNotNull } from 'drizzle-orm';
 import { jobs, applications, llmRequests, agentWorkLogs } from '@auto-job-apply/db';
 import type { Database } from '@auto-job-apply/db';
 import { DRIZZLE_CLIENT } from '../core/database/database.constants.js';
@@ -157,6 +157,34 @@ export class AnalyticsRepository implements IAnalyticsRepository {
       interviews: Number(r.interviews),
       offers: Number(r.offers),
     }));
+  }
+
+  async getAbResults(userId: string) {
+    const rows = await this.db
+      .select({
+        variant: applications.abVariant,
+        applications: sql<number>`count(*)`,
+        interviews: sql<number>`count(*) FILTER (WHERE ${applications.status} = 'interview')`,
+        offers: sql<number>`count(*) FILTER (WHERE ${applications.status} = 'offer')`,
+        callbacks: sql<number>`count(*) FILTER (WHERE ${applications.status} IN ('interview', 'offer'))`,
+      })
+      .from(applications)
+      .where(and(eq(applications.userId, userId), isNotNull(applications.abVariant)))
+      .groupBy(applications.abVariant)
+      .orderBy(applications.abVariant);
+
+    return rows.map((r) => {
+      const apps = Number(r.applications);
+      const callbacks = Number(r.callbacks);
+      return {
+        variant: String(r.variant),
+        applications: apps,
+        interviews: Number(r.interviews),
+        offers: Number(r.offers),
+        callbacks,
+        callbackRate: apps > 0 ? Math.round((callbacks / apps) * 100) : 0,
+      };
+    });
   }
 
   async getCostTrends(userId: string, days: number) {

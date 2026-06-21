@@ -30,6 +30,10 @@ export const applications = pgTable('applications', {
   retryCount: integer('retry_count').default(0).notNull(),
   templateRegion: varchar('template_region', { length: 30 }),
   templateLayout: varchar('template_layout', { length: 30 }),
+  // A/B test bucket ('A' or 'B') for the resume-tailoring strategy used on this
+  // application. Assigned round-robin at tailor time; null when no resume was
+  // tailored. Callback (interview/offer) rate per variant is surfaced in Analytics.
+  abVariant: varchar('ab_variant', { length: 10 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });

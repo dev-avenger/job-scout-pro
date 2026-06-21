@@ -598,6 +598,111 @@ function ResponseRateSection() {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Resume A/B Testing                                                 */
+/* ------------------------------------------------------------------ */
+
+interface AbResultDataPoint {
+  variant: string;
+  applications: number;
+  interviews: number;
+  offers: number;
+  callbacks: number;
+  callbackRate: number;
+}
+
+const AB_VARIANT_LABELS: Record<string, string> = {
+  A: 'A · Impact narrative',
+  B: 'B · Keyword-dense',
+};
+
+function AbTestingSection() {
+  const [data, setData] = useState<AbResultDataPoint[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiClient
+      .get<AbResultDataPoint[]>('/analytics/ab-results')
+      .then(setData)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const chartData = (data ?? []).map((d) => ({
+    ...d,
+    label: AB_VARIANT_LABELS[d.variant] ?? d.variant,
+  }));
+
+  return (
+    <Card className="border-border/60 shadow-soft">
+      <CardHeader>
+        <CardTitle>Resume A/B Testing</CardTitle>
+        <CardDescription>
+          Callback rate (interview or offer) by resume-tailoring strategy. Variants are assigned
+          round-robin when each application's resume is tailored.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <LoadingSpinner />
+        ) : error ? (
+          <ErrorBanner message={error} />
+        ) : chartData.length > 0 ? (
+          <div className="space-y-4">
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  className="text-xs"
+                  tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                />
+                <YAxis
+                  unit="%"
+                  domain={[0, 100]}
+                  className="text-xs"
+                  tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                />
+                <Tooltip
+                  formatter={((value: number) => [`${value}%`, 'Callback rate']) as any}
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--popover))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '10px',
+                    fontSize: '12px',
+                    color: 'hsl(var(--popover-foreground))',
+                    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
+                  }}
+                />
+                <Bar dataKey="callbackRate" name="Callback rate" fill="#6366f1" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {chartData.map((d) => (
+                <div
+                  key={d.variant}
+                  className="rounded-lg border border-border/60 p-3 text-sm"
+                >
+                  <div className="font-medium">{d.label}</div>
+                  <div className="mt-1 text-muted-foreground">
+                    {d.applications} applications · {d.callbacks} callbacks ({d.callbackRate}%)
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {d.interviews} interviews · {d.offers} offers
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <EmptyState message="No A/B data yet — tailor a few applications to start the test." />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  LLM Spend                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -999,6 +1104,11 @@ export function Analytics() {
       {/* Response Rate Chart */}
       <section>
         <ResponseRateSection />
+      </section>
+
+      {/* Resume A/B Testing */}
+      <section>
+        <AbTestingSection />
       </section>
 
       {/* LLM Spend */}

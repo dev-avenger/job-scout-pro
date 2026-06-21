@@ -3,7 +3,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import type { Database } from '@auto-job-apply/db';
 import { applications, jobs, profiles, userPreferences } from '@auto-job-apply/db';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql, isNotNull } from 'drizzle-orm';
 import { DRIZZLE_CLIENT } from '../../core/database/database.constants.js';
 import { EVENT_BUS } from '../../core/event-bus/event-bus.constants.js';
 import type { IEventBus } from '../../core/event-bus/interfaces/event-bus.interface.js';
@@ -101,13 +101,30 @@ export class ApplicationProcessor extends WorkerHost {
           const context = { userId, applicationId, jobId: targetJob.id };
           const jobDescription =
             targetJob.description || `${targetJob.title} at ${targetJob.companyName}`;
+
+          // A/B test the tailoring strategy: bucket each application round-robin
+          // (count already-assigned applications for the user and alternate) so
+          // the two variants stay balanced. Analytics compares callback rate per
+          // variant. Defaults to 'A' if the count lookup fails.
+          let abVariant: 'A' | 'B' = 'A';
+          try {
+            const assigned = await (this.db
+              .select({ count: sql<number>`count(*)` })
+              .from(applications)
+              .where(and(eq(applications.userId, userId), isNotNull(applications.abVariant)) as any) as any);
+            abVariant = Number(assigned[0]?.count ?? 0) % 2 === 0 ? 'A' : 'B';
+          } catch (err) {
+            logger.warn({ error: err, applicationId }, 'A/B variant lookup failed; defaulting to A');
+          }
+
           const { tailored, costCents } = await this.resumeTailorAgent.tailorResume(
             profile as Record<string, unknown>,
             jobDescription,
             context,
+            abVariant,
           );
           totalCost += costCents;
-          logger.info({ applicationId, costCents }, 'Resume tailored');
+          logger.info({ applicationId, costCents, abVariant }, 'Resume tailored');
 
           // Generate cover letter
           const coverResult = await this.coverLetterAgent.generateCoverLetter(
@@ -125,6 +142,7 @@ export class ApplicationProcessor extends WorkerHost {
             coverLetter: coverResult.coverLetter,
             llmCostCents: totalCost,
             portalName,
+            abVariant,
             updatedAt: new Date(),
           } as any).where(eq(applications.id, applicationId) as any) as any);
         } catch (err) {

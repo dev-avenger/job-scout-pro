@@ -42,6 +42,11 @@ export class AnalyticsController {
     return this.analyticsService.getCostTrends(user.sub, numDays);
   }
 
+  @Get('analytics/ab-results')
+  async getAbResults(@CurrentUser() user: JwtPayload) {
+    return this.analyticsService.getAbResults(user.sub);
+  }
+
   @Get('monitoring/llm/spend')
   async getLlmSpend(@CurrentUser() user: JwtPayload) {
     return this.analyticsService.getLlmSpend(user.sub);
