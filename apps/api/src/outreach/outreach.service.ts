@@ -5,13 +5,28 @@ import { EVENT_BUS } from '../core/event-bus/event-bus.constants.js';
 import type { IOutreachRepository } from './interfaces/outreach-repository.interface.js';
 import type { IOutreachService } from './interfaces/outreach-service.interface.js';
 import type { IEventBus } from '../core/event-bus/interfaces/event-bus.interface.js';
+import { OutreachWriterAgent } from './agents/outreach-writer.agent.js';
 
 @Injectable()
 export class OutreachService implements IOutreachService {
   constructor(
     @Inject(OUTREACH_REPOSITORY) private readonly repo: IOutreachRepository,
     @Inject(EVENT_BUS) private readonly eventBus: IEventBus,
+    private readonly writerAgent: OutreachWriterAgent,
   ) {}
+
+  /**
+   * Suggest people to contact at a company for a role and draft an outreach
+   * email. Returns the suggestions; the caller decides whether to save a
+   * contact / draft message.
+   */
+  async suggestOutreach(
+    userId: string,
+    data: { companyName: string; jobTitle: string; candidateName?: string; candidateSummary?: string },
+  ) {
+    const { result, costCents } = await this.writerAgent.suggest(data, { userId });
+    return { ...result, costCents };
+  }
 
   async listMessages(userId: string) {
     return this.repo.listMessages(userId);

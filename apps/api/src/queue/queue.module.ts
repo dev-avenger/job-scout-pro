@@ -9,6 +9,8 @@ import { ResumeModule } from '../resume/resume.module.js';
 import { ApplicationModule } from '../application/application.module.js';
 import { InboxModule } from '../inbox/inbox.module.js';
 import { LlmModule } from '../llm/llm.module.js';
+import { OutreachModule } from '../outreach/outreach.module.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
 import { SchedulingModule } from '../scheduling/scheduling.module.js';
 import { JobSearchProcessor } from './processors/job-search.processor.js';
 import { JobValidationProcessor } from './processors/job-validation.processor.js';
@@ -47,6 +49,8 @@ const logger = createLogger({ name: 'queue-module' });
     ApplicationModule,
     InboxModule,
     LlmModule,
+    OutreachModule,
+    NotificationsModule,
     SchedulingModule,
   ],
   providers: [

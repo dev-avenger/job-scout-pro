@@ -4,4 +4,8 @@ export interface IOutreachService {
   approveAndSend(userId: string, messageId: string): Promise<void>;
   listContacts(userId: string): Promise<unknown[]>;
   createContact(userId: string, data: { name: string; email?: string; title?: string; company?: string; linkedinUrl?: string; relationshipType?: string }): Promise<{ id: string }>;
+  suggestOutreach(
+    userId: string,
+    data: { companyName: string; jobTitle: string; candidateName?: string; candidateSummary?: string },
+  ): Promise<unknown>;
 }

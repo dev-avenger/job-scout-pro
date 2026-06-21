@@ -14,6 +14,7 @@ import { SettingsModule } from './settings/settings.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { AnalyticsModule } from './analytics/analytics.module.js';
 import { AgentControlModule } from './agent-control/agent-control.module.js';
+import { DocumentsModule } from './documents/documents.module.js';
 import { HealthModule } from './health/health.module.js';
 import { WebsocketModule } from './websocket/websocket.module.js';
 import { QueueModule } from './queue/queue.module.js';
@@ -36,6 +37,7 @@ import { EventHandlersModule } from './core/event-bus/event-handlers.module.js';
     NotificationsModule,
     AnalyticsModule,
     AgentControlModule,
+    DocumentsModule,
     HealthModule,
     WebsocketModule,
     QueueModule,

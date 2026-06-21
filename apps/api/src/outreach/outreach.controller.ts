@@ -15,6 +15,21 @@ const CreateContactSchema = z.object({
   relationshipType: z.string().optional(),
 });
 
+const SuggestOutreachSchema = z.object({
+  companyName: z.string().min(1),
+  jobTitle: z.string().min(1),
+  candidateName: z.string().optional(),
+  candidateSummary: z.string().optional(),
+});
+
+const CreateMessageSchema = z.object({
+  applicationId: z.string().uuid().optional(),
+  contactId: z.string().uuid().optional(),
+  type: z.string().default('outreach'),
+  subject: z.string().min(1),
+  body: z.string().min(1),
+});
+
 @Controller('api/v1')
 @UseGuards(JwtAuthGuard)
 export class OutreachController {
@@ -42,5 +57,21 @@ export class OutreachController {
     @Body(new ZodValidationPipe(CreateContactSchema)) body: any,
   ) {
     return this.outreachService.createContact(user.sub, body);
+  }
+
+  @Post('outreach/suggest')
+  async suggestOutreach(
+    @CurrentUser() user: JwtPayload,
+    @Body(new ZodValidationPipe(SuggestOutreachSchema)) body: z.infer<typeof SuggestOutreachSchema>,
+  ) {
+    return this.outreachService.suggestOutreach(user.sub, body);
+  }
+
+  @Post('outreach')
+  async createMessage(
+    @CurrentUser() user: JwtPayload,
+    @Body(new ZodValidationPipe(CreateMessageSchema)) body: z.infer<typeof CreateMessageSchema>,
+  ) {
+    return this.outreachService.createMessage(user.sub, body);
   }
 }

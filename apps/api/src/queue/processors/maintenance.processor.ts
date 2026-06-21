@@ -2,10 +2,12 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Injectable, Inject } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import type { Database } from '@auto-job-apply/db';
-import { notifications, jobs } from '@auto-job-apply/db';
-import { lt, eq } from 'drizzle-orm';
+import { notifications, jobs, users } from '@auto-job-apply/db';
+import { lt } from 'drizzle-orm';
 import { DRIZZLE_CLIENT } from '../../core/database/database.constants.js';
 import { PortalMappingCache } from '../../application/portal-mapping-cache.js';
+import { NOTIFICATIONS_SERVICE } from '../../notifications/notifications.constants.js';
+import type { INotificationsService } from '../../notifications/interfaces/notifications-service.interface.js';
 import { createLogger } from '@auto-job-apply/shared-utils';
 
 const logger = createLogger({ name: 'maintenance-processor' });
@@ -16,6 +18,7 @@ export class MaintenanceProcessor extends WorkerHost {
   constructor(
     @Inject(DRIZZLE_CLIENT) private readonly db: Database,
     private readonly portalMappingCache: PortalMappingCache,
+    @Inject(NOTIFICATIONS_SERVICE) private readonly notificationsService: INotificationsService,
   ) {
     super();
   }
@@ -41,6 +44,18 @@ export class MaintenanceProcessor extends WorkerHost {
       .update(jobs)
       .set({ validationStatus: 'expired', isActive: false, updatedAt: now } as any)
       .where(lt(jobs.expiresAt, now) as any) as any);
+
+    // 4. Evaluate alert rules for every user (failure rate, budget thresholds).
+    try {
+      const allUsers = (await this.db.select({ id: users.id }).from(users)) as any[];
+      let totalFired = 0;
+      for (const u of allUsers) {
+        totalFired += await this.notificationsService.evaluateAlertRules(u.id);
+      }
+      logger.info({ users: allUsers.length, alertsFired: totalFired }, 'Alert rules evaluated');
+    } catch (err) {
+      logger.error({ error: err }, 'Alert-rule evaluation failed');
+    }
 
     logger.info('Maintenance complete');
   }
