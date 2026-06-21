@@ -51,19 +51,26 @@ All six shipped; API + web typecheck clean. New endpoints: `POST /research/inter
 
 ## Tier 2 — New self-contained features (no third-party risk)
 
-### 2.1 Resume A/B testing  · **M**
-- Schema field `resumeVersions.abVariant` + `callbackReceived` already exist.
-- Add: variant assignment when tailoring (round-robin/random over 2 variants), and an
-  analytics query joining `applications.responseType` → variant. Surface in Analytics.
-- Touch points: `resume-tailor` flow, `analytics.repository.ts` (new `getAbResults`).
+### 2.1 Resume A/B testing  · ✅ **DONE (2026-06-21)**
+- Note: the `resumeVersions.abVariant`/`callbackReceived` columns were dormant and
+  disconnected from the apply flow (no `resume_versions` row is created during
+  application), so the variant is recorded on a **new `applications.ab_variant`
+  column** (migration `0004_resume_ab_variant.sql`) instead.
+- Axis chosen: **tailoring strategy** — variant A (impact-narrative) vs B (ATS
+  keyword-dense), assigned round-robin per user at tailor time in the application
+  processor and fed to the tailor agent as an alternate directive.
+- Analytics: `GET /analytics/ab-results` aggregates callback (interview/offer) rate
+  per variant; surfaced as a "Resume A/B Testing" section on the Analytics page.
 
 ### 2.2 Global Cmd+K search  · **M**
 - Frontend-only: a command palette (e.g. `cmdk`) querying existing list endpoints
   (jobs, applications, contacts, profiles) with client-side fuzzy match + route nav.
 
 ### 2.3 Missing job sources  · **M each**
-- **RSS-as-channel**: a `jobSources` row type `rss` + a fetch/parse step in the
-  job-search processor (feed URL → items → normalize). Lowest risk; spec already lists it.
+- **RSS-as-channel**: ✅ **already built** — `rss-feed.source.ts` is a complete,
+  registered `IJobSource` (parses feeds via `rss-parser`, filters, normalizes);
+  `rss_feed` is in the `SourceChannel` enum and Settings has the feed-URL UI. The
+  original audit missed it. No work needed.
 - **Email-forwarding ingestion**: a dedicated inbound address / IMAP folder scan that
   reuses the existing IMAP client + an LLM extraction agent to pull listings from alert emails.
 - **Google Jobs / SerpApi aggregator**: optional `jobSources` type `serpapi` behind a user
@@ -139,7 +146,8 @@ All six shipped; API + web typecheck clean. New endpoints: `POST /research/inter
 1. **Tier 1** in full (≈1 sprint): turns five stub pages into working features against
    backends that already exist — highest value-per-effort, no new infra.
 2. **2.4 BambooHR** + reconcile the two `specs.md` honesty gaps (BambooHR, kill-switch wording).
-3. **2.1 A/B testing** and **2.3 RSS source** (schema/infra already present).
+3. ~~**2.1 A/B testing** and **2.3 RSS source**~~ ✅ done (2.3 was already built).
+   Next unblocked Tier 2: **2.2 Cmd+K search** and **2.5 company scoring**.
 4. **Tier 3 integrations** once a Google OAuth app + messaging tokens are provisioned.
 5. **Tier 4** only with explicit product sign-off on cost/compliance.
 
