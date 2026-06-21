@@ -95,10 +95,16 @@ All six shipped; API + web typecheck clean. New endpoints: `POST /research/inter
   ids/names; exact BambooHR DOM attribute names should be confirmed against a live tenant
   (label-based extension fill is unaffected).
 
-### 2.5 Company stability / culture / tech-stack scoring  · **M/L**
-- Schema fields already exist on `companies` (stabilityScore, culturalFitScore, techStack,
-  glassdoorRating, rtoPolicy). Add research agents (LLM-based, from public signals the
-  model knows) writing these during `triggerResearch`; surface in job/application detail.
+### 2.5 Company stability / culture / tech-stack scoring  · ✅ **DONE (2026-06-21)**
+- New `CompanyScoringAgent` (LLM, structured output) scores stability/culturalFit
+  (0-100), glassdoorRating (0-5 or null), techStack, and rtoPolicy from public
+  signals, deliberately conservative when signal is thin.
+- `ResearchService.scoreAndPersistCompany` writes those existing `companies`
+  columns; called both from `triggerResearch` (so the brief now also populates
+  scores) and a new `analyzeCompanyForApplication` (resolves company from the
+  application; scores by `job.companyName` when no company row is linked).
+- Endpoint `POST /research/company { applicationId }`; surfaced as a "Company
+  Signals" card in the ApplicationDetail Company tab (run/re-analyze).
 
 ---
 

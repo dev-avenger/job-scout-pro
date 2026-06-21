@@ -8,6 +8,7 @@ import { ScamDetectorAgent } from './agents/scam-detector.agent.js';
 import { InterviewPrepAgent } from './agents/interview-prep.agent.js';
 import { SalaryEstimatorAgent } from './agents/salary-estimator.agent.js';
 import { SkillGapAgent } from './agents/skill-gap.agent.js';
+import { CompanyScoringAgent } from './agents/company-scoring.agent.js';
 import { RESEARCH_SERVICE, RESEARCH_REPOSITORY } from './research.constants.js';
 
 @Module({
@@ -20,7 +21,15 @@ import { RESEARCH_SERVICE, RESEARCH_REPOSITORY } from './research.constants.js';
     InterviewPrepAgent,
     SalaryEstimatorAgent,
     SkillGapAgent,
+    CompanyScoringAgent,
   ],
-  exports: [RESEARCH_SERVICE, ScamDetectorAgent, InterviewPrepAgent, SalaryEstimatorAgent, SkillGapAgent],
+  exports: [
+    RESEARCH_SERVICE,
+    ScamDetectorAgent,
+    InterviewPrepAgent,
+    SalaryEstimatorAgent,
+    SkillGapAgent,
+    CompanyScoringAgent,
+  ],
 })
 export class ResearchModule {}

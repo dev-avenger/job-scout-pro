@@ -34,6 +34,10 @@ const InterviewPrepSchema = z.object({
   applicationId: z.string().uuid(),
 });
 
+const CompanyScoringSchema = z.object({
+  applicationId: z.string().uuid(),
+});
+
 @Controller('api/v1/research')
 @UseGuards(JwtAuthGuard)
 export class ResearchAnalysisController {
@@ -70,5 +74,13 @@ export class ResearchAnalysisController {
     @Body(new ZodValidationPipe(InterviewPrepSchema)) body: z.infer<typeof InterviewPrepSchema>,
   ) {
     return this.researchService.generateInterviewPrep(user.sub, body.applicationId);
+  }
+
+  @Post('company')
+  async analyzeCompany(
+    @CurrentUser() user: JwtPayload,
+    @Body(new ZodValidationPipe(CompanyScoringSchema)) body: z.infer<typeof CompanyScoringSchema>,
+  ) {
+    return this.researchService.analyzeCompanyForApplication(user.sub, body.applicationId);
   }
 }

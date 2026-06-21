@@ -123,6 +123,17 @@ interface SkillGapData {
   summary: string;
 }
 
+interface CompanyScoreData {
+  stabilityScore: number;
+  culturalFitScore: number;
+  glassdoorRating: number | null;
+  techStack: string[];
+  rtoPolicy: string;
+  summary: string;
+  signals: string[];
+  persisted: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -272,6 +283,9 @@ export function ApplicationDetail() {
   const [skillGap, setSkillGap] = useState<SkillGapData | null>(null);
   const [skillGapLoading, setSkillGapLoading] = useState(false);
   const [skillGapError, setSkillGapError] = useState<string | null>(null);
+  const [companyScore, setCompanyScore] = useState<CompanyScoreData | null>(null);
+  const [companyScoreLoading, setCompanyScoreLoading] = useState(false);
+  const [companyScoreError, setCompanyScoreError] = useState<string | null>(null);
 
   // -------------------------------------------------------------------------
   // Data Fetching
@@ -350,6 +364,20 @@ export function ApplicationDetail() {
       setSkillGapError(err instanceof Error ? err.message : 'Failed to analyze skill gap');
     } finally {
       setSkillGapLoading(false);
+    }
+  };
+
+  const runCompanyScore = async () => {
+    if (!id) return;
+    setCompanyScoreLoading(true);
+    setCompanyScoreError(null);
+    try {
+      const data = await apiClient.post<CompanyScoreData>('/research/company', { applicationId: id });
+      setCompanyScore(data);
+    } catch (err) {
+      setCompanyScoreError(err instanceof Error ? err.message : 'Failed to analyze company');
+    } finally {
+      setCompanyScoreLoading(false);
     }
   };
 
@@ -923,25 +951,116 @@ export function ApplicationDetail() {
   // Render: Company Brief Tab
   // -------------------------------------------------------------------------
 
+  function renderCompanyScore() {
+    const rtoLabel: Record<string, string> = {
+      remote: 'Remote',
+      hybrid: 'Hybrid',
+      onsite: 'On-site',
+      unknown: 'Unknown',
+    };
+    return (
+      <Card className="border-border/60 shadow-soft">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Sparkles className="w-5 h-5" />
+            Company Signals
+          </CardTitle>
+          <CardDescription>
+            AI estimate of stability, culture, RTO and tech stack from public signals. Honest about
+            uncertainty — thin-signal companies score near the middle.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {!companyScore ? (
+            <div className="flex flex-col items-start">
+              <p className="text-sm text-muted-foreground">
+                Run an AI analysis of {application?.job.company ?? 'this company'} as an employer.
+              </p>
+              {companyScoreError && (
+                <p className="text-sm text-destructive mt-3">{companyScoreError}</p>
+              )}
+              <Button className="mt-5" onClick={runCompanyScore} disabled={companyScoreLoading}>
+                {companyScoreLoading ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4 mr-2" />
+                )}
+                Analyze company
+              </Button>
+            </div>
+          ) : (
+            <>
+              <ScoreBar
+                label="Stability"
+                score={companyScore.stabilityScore}
+                description="Financial / employment stability"
+              />
+              <ScoreBar
+                label="Cultural fit"
+                score={companyScore.culturalFitScore}
+                description="General workplace & culture quality"
+              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-muted-foreground">Glassdoor rating</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {companyScore.glassdoorRating !== null
+                      ? `${companyScore.glassdoorRating.toFixed(1)} / 5`
+                      : 'Unknown'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">RTO policy</p>
+                  <Badge variant="outline" className="mt-0.5">
+                    {rtoLabel[companyScore.rtoPolicy] ?? companyScore.rtoPolicy}
+                  </Badge>
+                </div>
+              </div>
+              {companyScore.techStack.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1.5">Tech stack</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {companyScore.techStack.map((t) => (
+                      <Badge key={t} variant="secondary">
+                        {t}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {companyScore.summary && (
+                <p className="text-sm text-foreground leading-relaxed">{companyScore.summary}</p>
+              )}
+              {companyScore.signals.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Based on</p>
+                  <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+                    {companyScore.signals.map((s, i) => (
+                      <li key={i}>{s}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <Button variant="outline" size="sm" onClick={runCompanyScore} disabled={companyScoreLoading}>
+                {companyScoreLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                Re-analyze
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
   function renderCompanyBrief() {
     if (!application?.companyBrief) {
-      return (
-        <Card className="border-border/60 shadow-soft">
-          <CardContent className="p-5">
-            <div className="flex flex-col items-center justify-center py-8">
-              <Building2 className="w-8 h-8 text-muted-foreground mb-3" />
-              <p className="text-sm text-muted-foreground">
-                No company research data available.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      );
+      return <div className="space-y-4">{renderCompanyScore()}</div>;
     }
 
     const brief = application.companyBrief;
 
     return (
+      <div className="space-y-4">
       <Card className="border-border/60 shadow-soft">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
@@ -1005,6 +1124,8 @@ export function ApplicationDetail() {
           </div>
         </CardContent>
       </Card>
+      {renderCompanyScore()}
+      </div>
     );
   }
 

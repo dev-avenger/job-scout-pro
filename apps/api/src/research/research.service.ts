@@ -12,6 +12,7 @@ import type { ILLMService } from '../llm/interfaces/llm-service.interface.js';
 import { SalaryEstimatorAgent, type SalaryEstimateInput } from './agents/salary-estimator.agent.js';
 import { SkillGapAgent, type SkillGapInput } from './agents/skill-gap.agent.js';
 import { InterviewPrepAgent } from './agents/interview-prep.agent.js';
+import { CompanyScoringAgent, type CompanyScoringInput } from './agents/company-scoring.agent.js';
 
 /** Coerce a profile's `skills` jsonb (string[] | {name}[]) into a flat string[]. */
 function skillNames(skills: unknown): string[] {
@@ -30,6 +31,7 @@ export class ResearchService implements IResearchService {
     private readonly salaryEstimator: SalaryEstimatorAgent,
     private readonly skillGapAgent: SkillGapAgent,
     private readonly interviewPrepAgent: InterviewPrepAgent,
+    private readonly companyScoringAgent: CompanyScoringAgent,
   ) {}
 
   async estimateSalary(userId: string, input: SalaryEstimateInput) {
@@ -107,7 +109,49 @@ export class ResearchService implements IResearchService {
     return this.repo.getCompany(companyId);
   }
 
+  /**
+   * Score a company on stability/culture/RTO/tech-stack via the LLM and persist
+   * the structured fields onto the `companies` row when the company is known.
+   * Falls back to scoring by name (ephemeral, no persist) for jobs whose company
+   * isn't linked yet.
+   */
+  private async scoreAndPersistCompany(
+    company: { id?: string; name?: string; domain?: string; industry?: string; sizeRange?: string } | null,
+    fallbackName: string,
+    userId: string,
+  ) {
+    const input: CompanyScoringInput = {
+      name: company?.name ?? fallbackName,
+      domain: company?.domain ?? undefined,
+      industry: company?.industry ?? undefined,
+      sizeRange: company?.sizeRange ?? undefined,
+    };
+
+    const { result, costCents } = await this.companyScoringAgent.score(input, { userId });
+
+    if (company?.id) {
+      await this.repo.updateCompanyResearch(company.id, {
+        stabilityScore: result.stabilityScore,
+        culturalFitScore: result.culturalFitScore,
+        glassdoorRating: result.glassdoorRating,
+        techStack: result.techStack,
+        rtoPolicy: result.rtoPolicy,
+        lastResearchedAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+
+    return { ...result, costCents, persisted: Boolean(company?.id) };
+  }
+
+  async analyzeCompanyForApplication(userId: string, applicationId: string) {
+    const { job, company } = await this.loadApplicationContext(userId, applicationId);
+    return this.scoreAndPersistCompany(company, job.companyName ?? 'the company', userId);
+  }
+
   async triggerResearch(companyId: string, companyName: string, userId: string) {
+    const company = (await this.repo.getCompany(companyId)) as any;
+
     const result = await this.llmService.generateText(
       'company_research',
       {
@@ -117,13 +161,33 @@ export class ResearchService implements IResearchService {
       { userId },
     );
 
+    // Also populate the structured score fields (stability/culture/RTO/etc.).
+    const scoring = await this.scoreAndPersistCompany(
+      company ?? { id: companyId, name: companyName },
+      companyName,
+      userId,
+    );
+
     await this.repo.updateCompanyResearch(companyId, {
-      researchData: { brief: result.text, generatedAt: new Date().toISOString() },
+      researchData: {
+        brief: result.text,
+        scoring: { summary: scoring.summary, signals: scoring.signals },
+        generatedAt: new Date().toISOString(),
+      },
       lastResearchedAt: new Date(),
       updatedAt: new Date(),
     });
 
-    return { research: result.text };
+    return {
+      research: result.text,
+      scores: {
+        stabilityScore: scoring.stabilityScore,
+        culturalFitScore: scoring.culturalFitScore,
+        glassdoorRating: scoring.glassdoorRating,
+        techStack: scoring.techStack,
+        rtoPolicy: scoring.rtoPolicy,
+      },
+    };
   }
 
   async createCompany(data: { name: string; domain?: string; careersUrl?: string }) {
