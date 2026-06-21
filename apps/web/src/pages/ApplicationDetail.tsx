@@ -36,6 +36,8 @@ import {
   Eye,
   Ban,
   ExternalLink,
+  Target,
+  Sparkles,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -110,6 +112,15 @@ interface TimelineEvent {
   type: string;
   description: string;
   createdAt: string;
+}
+
+interface SkillGapData {
+  gapScore: number;
+  matchedSkills: string[];
+  missingSkills: string[];
+  transferableSkills: Array<{ have: string; maps_to: string }>;
+  recommendations: Array<{ skill: string; why: string; resource?: string }>;
+  summary: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -258,6 +269,9 @@ export function ApplicationDetail() {
   const [activeTab, setActiveTab] = useState('overview');
   const [editedAnswers, setEditedAnswers] = useState<Record<number, string> | null>(null);
   const [savingAnswers, setSavingAnswers] = useState(false);
+  const [skillGap, setSkillGap] = useState<SkillGapData | null>(null);
+  const [skillGapLoading, setSkillGapLoading] = useState(false);
+  const [skillGapError, setSkillGapError] = useState<string | null>(null);
 
   // -------------------------------------------------------------------------
   // Data Fetching
@@ -322,6 +336,20 @@ export function ApplicationDetail() {
       );
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const runSkillGap = async () => {
+    if (!id) return;
+    setSkillGapLoading(true);
+    setSkillGapError(null);
+    try {
+      const data = await apiClient.post<SkillGapData>('/research/skill-gap', { applicationId: id });
+      setSkillGap(data);
+    } catch (err) {
+      setSkillGapError(err instanceof Error ? err.message : 'Failed to analyze skill gap');
+    } finally {
+      setSkillGapLoading(false);
     }
   };
 
@@ -981,6 +1009,109 @@ export function ApplicationDetail() {
   }
 
   // -------------------------------------------------------------------------
+  // Render: Skill Gap Tab
+  // -------------------------------------------------------------------------
+
+  function renderSkillGap() {
+    if (!skillGap) {
+      return (
+        <Card className="border-border/60 shadow-soft">
+          <CardContent className="p-5">
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <Target className="w-8 h-8 text-muted-foreground mb-3" />
+              <p className="text-sm text-muted-foreground max-w-sm">
+                Compare your default resume against this role to see matched, missing, and
+                transferable skills plus a learning plan.
+              </p>
+              {skillGapError && <p className="text-sm text-destructive mt-3">{skillGapError}</p>}
+              <Button className="mt-5" onClick={runSkillGap} disabled={skillGapLoading}>
+                {skillGapLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                Analyze skill gap
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        <Card className="border-border/60 shadow-soft">
+          <CardHeader>
+            <CardTitle className="text-lg">Skill Gap Analysis</CardTitle>
+            <CardDescription>{skillGap.summary}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <ScoreBar
+              label="Gap Score"
+              score={skillGap.gapScore}
+              invert
+              description="How far your profile is from the role (lower is better)"
+            />
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Matched</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {skillGap.matchedSkills.length
+                    ? skillGap.matchedSkills.map((s) => (
+                        <Badge key={s} variant="success" className="font-normal">{s}</Badge>
+                      ))
+                    : <span className="text-sm text-muted-foreground">None</span>}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Missing</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {skillGap.missingSkills.length
+                    ? skillGap.missingSkills.map((s) => (
+                        <Badge key={s} variant="destructive" className="font-normal">{s}</Badge>
+                      ))
+                    : <span className="text-sm text-muted-foreground">None</span>}
+                </div>
+              </div>
+            </div>
+
+            {skillGap.transferableSkills.length > 0 && (
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Transferable</p>
+                <ul className="space-y-1">
+                  {skillGap.transferableSkills.map((t, i) => (
+                    <li key={i} className="text-sm text-foreground">
+                      <span className="font-medium">{t.have}</span>
+                      <span className="text-muted-foreground"> → {t.maps_to}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {skillGap.recommendations.length > 0 && (
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Learning plan</p>
+                <div className="space-y-2">
+                  {skillGap.recommendations.map((r, i) => (
+                    <div key={i} className="rounded-lg border border-border/60 p-3">
+                      <p className="text-sm font-medium text-foreground">{r.skill}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{r.why}</p>
+                      {r.resource && <p className="text-xs text-primary mt-0.5">{r.resource}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <Button variant="outline" size="sm" onClick={runSkillGap} disabled={skillGapLoading}>
+              {skillGapLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Re-analyze
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------------
   // Render: Timeline Tab
   // -------------------------------------------------------------------------
 
@@ -1225,6 +1356,10 @@ export function ApplicationDetail() {
             <Building2 className="h-4 w-4" />
             Company
           </TabsTrigger>
+          <TabsTrigger value="skill-gap" className="gap-1.5">
+            <Target className="h-4 w-4" />
+            Skill Gap
+          </TabsTrigger>
           <TabsTrigger value="timeline" className="gap-1.5">
             <History className="h-4 w-4" />
             Timeline
@@ -1246,6 +1381,7 @@ export function ApplicationDetail() {
         </TabsContent>
         <TabsContent value="emails">{renderEmails()}</TabsContent>
         <TabsContent value="company">{renderCompanyBrief()}</TabsContent>
+        <TabsContent value="skill-gap">{renderSkillGap()}</TabsContent>
         <TabsContent value="timeline">{renderTimeline()}</TabsContent>
       </Tabs>
     </div>
