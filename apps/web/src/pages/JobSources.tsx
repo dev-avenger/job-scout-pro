@@ -34,6 +34,7 @@ const ADAPTER_LABELS: Record<WatchlistAdapter, string> = {
   workable: 'Workable',
   greenhouse: 'Greenhouse',
   lever: 'Lever',
+  bamboohr: 'BambooHR',
   html: 'Careers page (HTML)',
 };
 
@@ -282,6 +283,7 @@ export function JobSources() {
                       <SelectItem value="workable">Workable</SelectItem>
                       <SelectItem value="greenhouse">Greenhouse</SelectItem>
                       <SelectItem value="lever">Lever</SelectItem>
+                      <SelectItem value="bamboohr">BambooHR</SelectItem>
                       <SelectItem value="html">Careers page (HTML)</SelectItem>
                       <SelectItem value="successfactors">SAP SuccessFactors</SelectItem>
                     </SelectContent>

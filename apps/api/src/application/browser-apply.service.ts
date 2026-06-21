@@ -266,6 +266,12 @@ export class BrowserApplyService {
       await page.goto(formUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
       await page.waitForTimeout(2500);
 
+      // BambooHR (and some other careers pages) keep the application form hidden
+      // behind an "Apply for This Job" button on the posting page. Reveal it
+      // before filling so the fields actually exist in the DOM. Best-effort: if
+      // the button isn't there (form already inline), this is a no-op.
+      await this.revealApplicationForm(page, formUrl);
+
       // Fill prepared answers across ONE or MORE steps. Multi-step ATS forms
       // reveal later fields only after earlier steps advance, so we fill what's
       // present, click Next, and fill again. FormMemory records what we've
@@ -430,6 +436,46 @@ export class BrowserApplyService {
           }
         }
       }
+    }
+  }
+
+  /**
+   * Some careers pages render the application fields only after the candidate
+   * clicks an "Apply" call-to-action (notably BambooHR's "Apply for This Job").
+   * Click it so the form exists before we try to fill it. No-op when the form
+   * is already inline or the button can't be found.
+   */
+  private async revealApplicationForm(
+    page: import('playwright-core').Page,
+    formUrl: string,
+  ): Promise<void> {
+    const isBamboo = /(^|\.)bamboohr\.com$/i.test(this.safeHost(formUrl));
+    if (!isBamboo) return;
+
+    try {
+      // If real form inputs are already present, nothing to reveal.
+      const alreadyOpen = await page.locator('input#firstName, input[name="firstName"]').first().count();
+      if (alreadyOpen) return;
+
+      const applyBtn = page
+        .locator(
+          'button:has-text("Apply for This Job"), a:has-text("Apply for This Job"), ' +
+            'button:has-text("Apply for this Job"), button:has-text("Apply Now"), a:has-text("Apply Now")',
+        )
+        .first();
+      if (!(await applyBtn.count())) return;
+
+      await applyBtn.click({ timeout: 5000 }).catch(() => {});
+      // Wait for a known BambooHR field (or any text input) to render.
+      await page
+        .locator('input#firstName, input[name="firstName"], input[type="text"]')
+        .first()
+        .waitFor({ state: 'visible', timeout: 10000 })
+        .catch(() => {});
+      await page.waitForTimeout(800);
+      logger.info({ formUrl }, 'Revealed BambooHR application form');
+    } catch (err) {
+      logger.debug({ error: err, formUrl }, 'revealApplicationForm best-effort failed');
     }
   }
 

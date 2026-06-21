@@ -1,4 +1,4 @@
-export type WatchlistAdapter = 'workable' | 'greenhouse' | 'lever' | 'html' | 'successfactors';
+export type WatchlistAdapter = 'workable' | 'greenhouse' | 'lever' | 'html' | 'successfactors' | 'bamboohr';
 
 export interface WatchlistEntry {
   company: string;

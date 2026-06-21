@@ -28,6 +28,12 @@ describe('AtsApplyService.detectAts', () => {
     expect(r.ref).toMatchObject({ company: 'AcmeInc' });
   });
 
+  it('detects BambooHR with company + jobId', () => {
+    const r = svc.detectAts('https://acme.bamboohr.com/careers/123');
+    expect(r.type).toBe('bamboohr');
+    expect(r.ref).toMatchObject({ company: 'acme', jobId: '123' });
+  });
+
   it('detects Workday', () => {
     expect(svc.detectAts('https://acme.wd1.myworkdayjobs.com/en-US/careers/job/123').type).toBe(
       'workday',

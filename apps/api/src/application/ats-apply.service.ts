@@ -22,6 +22,7 @@ export type AtsType =
   | 'workable'
   | 'lever'
   | 'smartrecruiters'
+  | 'bamboohr'
   | 'workday'
   | 'successfactors'
   | 'unknown';
@@ -115,6 +116,13 @@ export class AtsApplyService {
       if (host.includes('smartrecruiters.com')) {
         // jobs.smartrecruiters.com/{Company}/{postingId}-{slug}
         return { type: 'smartrecruiters', ref: { company: parts[0], jobId: parts[1] } };
+      }
+      if (host.endsWith('.bamboohr.com') || host === 'bamboohr.com') {
+        // {company}.bamboohr.com/careers/{id}
+        const company = host.split('.')[0];
+        const careersIdx = parts.indexOf('careers');
+        const jobId = careersIdx >= 0 ? parts[careersIdx + 1] : undefined;
+        return { type: 'bamboohr', ref: { company, jobId } };
       }
       if (host.includes('myworkdayjobs.com') || host.includes('myworkday.com')) {
         return { type: 'workday', ref: { company: host.split('.')[0] } };
@@ -216,6 +224,26 @@ export class AtsApplyService {
             { id: 'resume', label: 'Resume', type: 'file', required: true },
           ];
           return { atsType: 'smartrecruiters', fields };
+        }
+        case 'bamboohr': {
+          // BambooHR's hosted application form uses a stable universal field set.
+          // Per-posting custom/screening questions are not reliably exposed by a
+          // public API, so (like SmartRecruiters) we prepare the universal fields
+          // deterministically and leave any extra questions to the browser/DOM
+          // fill at submit time.
+          const fields: NormalizedField[] = [
+            { id: 'firstName', label: 'First name', type: 'text', required: true },
+            { id: 'lastName', label: 'Last name', type: 'text', required: true },
+            { id: 'email', label: 'Email', type: 'email', required: true },
+            { id: 'phone', label: 'Phone', type: 'phone', required: false },
+            { id: 'address', label: 'Address', type: 'text', required: false },
+            { id: 'city', label: 'City', type: 'text', required: false },
+            { id: 'linkedinUrl', label: 'LinkedIn URL', type: 'text', required: false },
+            { id: 'websiteUrl', label: 'Website / Portfolio URL', type: 'text', required: false },
+            { id: 'resume', label: 'Resume', type: 'file', required: true },
+            { id: 'coverLetter', label: 'Cover letter', type: 'textarea', required: false },
+          ];
+          return { atsType: 'bamboohr', fields };
         }
         default:
           // workday / successfactors / unknown: no public form schema.

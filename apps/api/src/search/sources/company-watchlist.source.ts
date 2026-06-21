@@ -13,7 +13,7 @@ const BROWSER_UA =
 
 type WatchlistEntry = {
   company: string;
-  adapter: 'workable' | 'greenhouse' | 'lever' | 'html' | 'successfactors';
+  adapter: 'workable' | 'greenhouse' | 'lever' | 'html' | 'successfactors' | 'bamboohr';
   ref: string;
   city?: string;
   country?: string;
@@ -68,6 +68,9 @@ export class CompanyWatchlistSource implements IJobSource {
           case 'successfactors':
             jobs = await this.fetchSuccessFactors(entry.ref);
             break;
+          case 'bamboohr':
+            jobs = await this.fetchBambooHr(entry.ref);
+            break;
         }
       } catch (err) {
         logger.error({ error: err, company: entry.company }, 'Watchlist company fetch failed');
@@ -83,6 +86,9 @@ export class CompanyWatchlistSource implements IJobSource {
       );
       if (entry.adapter === 'workable') {
         await this.enrichWorkableDescriptions(entry.ref, matched.slice(0, 20));
+      }
+      if (entry.adapter === 'bamboohr') {
+        await this.enrichBambooHrDescriptions(entry.ref, matched.slice(0, 20));
       }
 
       for (const job of matched) {
@@ -340,6 +346,72 @@ export class CompanyWatchlistSource implements IJobSource {
     } finally {
       await browser?.close().catch(() => {});
     }
+  }
+
+  /**
+   * BambooHR-hosted careers ({company}.bamboohr.com). The public widget feed
+   * `/careers/list` returns every open posting as JSON — no auth, no scraping.
+   * `ref` is the company subdomain (e.g. "acme" for acme.bamboohr.com).
+   */
+  private async fetchBambooHr(subdomain: string): Promise<FoundJob[]> {
+    const base = `https://${subdomain}.bamboohr.com`;
+    const response = await fetch(`${base}/careers/list`, {
+      headers: { Accept: 'application/json', 'User-Agent': BROWSER_UA },
+    });
+    if (!response.ok) return [];
+    const data = (await response.json()) as {
+      result?: Array<{
+        id?: number | string;
+        jobOpeningName?: string;
+        locationLabel?: string;
+        atsLocation?: { city?: string; state?: string; addressCountry?: string };
+        employmentStatusLabel?: string;
+        jobOpeningShareUrl?: string;
+      }>;
+    };
+    return (data.result ?? [])
+      .filter((j) => j.jobOpeningName && j.id != null)
+      .map((j) => {
+        const id = String(j.id);
+        const location =
+          j.locationLabel ||
+          [j.atsLocation?.city, j.atsLocation?.state, j.atsLocation?.addressCountry]
+            .filter(Boolean)
+            .join(', ') ||
+          undefined;
+        return {
+          externalId: id,
+          title: j.jobOpeningName!,
+          url: j.jobOpeningShareUrl || `${base}/careers/${id}`,
+          // Canonical BambooHR posting URL keeps the apply detection reachable
+          // even when jobOpeningShareUrl points at a custom domain.
+          applyUrl: `${base}/careers/${id}`,
+          location,
+        };
+      });
+  }
+
+  /** Fill in descriptions for BambooHR jobs from the per-posting detail JSON. */
+  private async enrichBambooHrDescriptions(subdomain: string, jobs: FoundJob[]): Promise<void> {
+    const base = `https://${subdomain}.bamboohr.com`;
+    await Promise.all(
+      jobs.map(async (job) => {
+        if (job.description || !job.externalId) return;
+        try {
+          const res = await fetch(`${base}/careers/${job.externalId}/detail`, {
+            headers: { Accept: 'application/json', 'User-Agent': BROWSER_UA },
+          });
+          if (!res.ok) return;
+          const detail = (await res.json()) as {
+            result?: { jobOpening?: { description?: string }; description?: string };
+          };
+          const html = detail.result?.jobOpening?.description ?? detail.result?.description;
+          if (html) job.description = stripHtml(String(html)).substring(0, 2000);
+        } catch {
+          // listing stays usable without the description
+        }
+      }),
+    );
   }
 
   /** Render a JS-heavy careers page in headless Chromium and read its DOM. */

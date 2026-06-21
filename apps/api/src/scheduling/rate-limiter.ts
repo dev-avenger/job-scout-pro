@@ -10,6 +10,7 @@ const PLATFORM_LIMITS: Record<string, { maxPerDay: number; minIntervalMs: number
   workday: { maxPerDay: 10, minIntervalMs: 120000 },
   greenhouse: { maxPerDay: 15, minIntervalMs: 60000 },
   lever: { maxPerDay: 15, minIntervalMs: 60000 },
+  bamboohr: { maxPerDay: 15, minIntervalMs: 60000 },
   ashby: { maxPerDay: 15, minIntervalMs: 60000 },
   icims: { maxPerDay: 10, minIntervalMs: 120000 },
   taleo: { maxPerDay: 8, minIntervalMs: 180000 },
