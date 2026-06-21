@@ -82,7 +82,7 @@ You can set autonomy on a per-feature basis:
 
 ### Pause-all and kill switch
 
-Regardless of autonomy level, the portal provides a one-click **Pause All** button that immediately stops all agent activity. A separate **Kill Switch** stops all activity and withdraws all pending applications on portals that support withdrawal. Both are always accessible from the top of the portal.
+Regardless of autonomy level, the portal provides a one-click **Pause All** button that immediately stops all agent activity. A separate **Kill Switch** stops all activity and withdraws all *pending* (pre-submission) applications — those still queued or in progress. It does **not** retract applications already submitted to external portals; once an application has been sent, the agent cannot un-send it. Both controls are always accessible from the top of the portal.
 
 ---
 
